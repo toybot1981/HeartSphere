@@ -25,7 +25,8 @@ const App: React.FC = () => {
   };
 
   const [gameState, setGameState] = useState<GameState>({
-    currentScreen: 'home',
+    currentScreen: 'profileSetup',
+    userProfile: null,
     selectedSceneId: null,
     selectedCharacterId: null,
     selectedScenarioId: null,
@@ -39,6 +40,11 @@ const App: React.FC = () => {
   
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const attemptedGenerations = useRef<Set<string>>(new Set());
+
+  // States for profile setup screen
+  const [nickname, setNickname] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('https://picsum.photos/seed/default_avatar/512/512');
+  const [isGeneratingUserAvatar, setIsGeneratingUserAvatar] = useState(false);
   
   const handleGenerateAvatar = async (character: Character) => {
     if (gameState.generatingAvatarId) return;
@@ -56,6 +62,32 @@ const App: React.FC = () => {
     }
   };
 
+  const handleGenerateUserAvatar = async () => {
+    if (isGeneratingUserAvatar) return;
+    setIsGeneratingUserAvatar(true);
+    const prompt = `A digital, vibrant, modern Chinese anime (Manhua) style avatar for a user named "${nickname || '探索者'}". Clean lines, high resolution, suitable for a profile picture.`;
+    try {
+        const newAvatar = await geminiService.generateImageFromPrompt(prompt, '1:1');
+        if (newAvatar) setAvatarUrl(newAvatar);
+    } catch(e) {
+        console.error("User avatar generation failed", e);
+    } finally {
+        setIsGeneratingUserAvatar(false);
+    }
+  };
+
+  const handleConfirmProfile = () => {
+    if (!nickname.trim()) {
+        alert("请输入一个昵称！");
+        return;
+    }
+    setGameState(prev => ({
+        ...prev,
+        userProfile: { nickname: nickname.trim(), avatarUrl },
+        currentScreen: 'sceneSelection'
+    }));
+  };
+
   useEffect(() => {
     if (!gameState.settings.autoGenerateAvatars || gameState.generatingAvatarId || gameState.currentScreen !== 'characterSelection') return;
     const scene = WORLD_SCENES.find(s => s.id === gameState.selectedSceneId);
@@ -67,7 +99,6 @@ const App: React.FC = () => {
     }
   }, [gameState.customAvatars, gameState.generatingAvatarId, gameState.settings.autoGenerateAvatars, gameState.currentScreen, gameState.selectedSceneId]);
 
-  const handleStartGame = () => setGameState(prev => ({ ...prev, currentScreen: 'sceneSelection' }));
   const handleBackToSceneSelection = () => setGameState(prev => ({ ...prev, currentScreen: 'sceneSelection', selectedSceneId: null }));
   const handleBackToCharacterSelection = () => setGameState(prev => ({ ...prev, currentScreen: 'characterSelection', selectedCharacterId: null, selectedScenarioId: null, currentScenarioState: undefined }));
   
@@ -121,12 +152,43 @@ const App: React.FC = () => {
     <div className="h-screen w-full bg-black text-white selection:bg-pink-500 selection:text-white overflow-hidden font-sans">
       {showSettingsModal && <SettingsModal settings={gameState.settings} onSettingsChange={handleSettingsChange} onClose={() => setShowSettingsModal(false)} />}
       
-      {gameState.currentScreen === 'home' && (
-        <div className="relative h-full w-full flex flex-col items-center justify-center">
+      {gameState.currentScreen === 'profileSetup' && (
+        <div className="relative h-full w-full flex flex-col items-center justify-center p-4">
           <div className="absolute inset-0 z-0"><img src="https://picsum.photos/seed/anime_sky/1920/1080" className="w-full h-full object-cover opacity-40 blur-sm scale-110 animate-[pulse_10s_ease-in-out_infinite]" /><div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60" /></div>
-          <div className="z-10 text-center px-6 animate-fade-in space-y-8">
-            <div className="space-y-2"><h1 className="text-6xl md:text-8xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 drop-shadow-[0_0_20px_rgba(236,72,153,0.5)]">{APP_TITLE}</h1><p className="text-xl md:text-2xl text-pink-100/80 font-light tracking-[0.2em] uppercase">{APP_SUBTITLE}</p></div>
-            <button onClick={handleStartGame} className="group relative px-8 py-4 bg-white text-black font-bold text-lg tracking-widest uppercase overflow-hidden rounded-full transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.4)]"><div className="absolute inset-0 w-0 bg-pink-500 transition-all duration-[250ms] ease-out group-hover:w-full opacity-20" /><span className="relative z-10 group-hover:text-pink-600 transition-colors">进入心域</span></button>
+          <div className="z-10 text-center animate-fade-in space-y-8 w-full max-w-md">
+            <div className="space-y-2">
+              <h1 className="text-5xl md:text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 drop-shadow-[0_0_20px_rgba(236,72,153,0.5)]">创建你的档案</h1>
+              <p className="text-lg text-pink-100/80 font-light">你是这个世界的主角，一切故事因你而生。</p>
+            </div>
+
+            <div className="space-y-6">
+              <div className="relative w-40 h-40 mx-auto rounded-full border-4 border-white/20 shadow-2xl overflow-hidden group bg-black/30">
+                <img src={avatarUrl} alt="User Avatar" className={`w-full h-full object-cover transition-all duration-300 ${isGeneratingUserAvatar ? 'blur-sm scale-110 opacity-60' : ''}`} />
+                 {isGeneratingUserAvatar && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-10 h-10 border-4 border-t-transparent border-pink-400 rounded-full animate-spin" />
+                  </div>
+                )}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={handleGenerateUserAvatar} disabled={isGeneratingUserAvatar} className="text-white text-sm backdrop-blur-sm bg-black/30 px-3 py-1 rounded-full border border-white/20">
+                    {isGeneratingUserAvatar ? '生成中...' : 'AI 生成头像'}
+                  </button>
+                </div>
+              </div>
+
+              <input
+                type="text"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="输入你的昵称..."
+                className="w-full text-center text-xl font-bold bg-white/5 border-2 border-white/10 rounded-full py-3 px-6 text-white placeholder-white/40 focus:border-pink-400 focus:ring-0 outline-none transition-colors"
+              />
+            </div>
+
+            <button onClick={handleConfirmProfile} disabled={!nickname.trim()} className="group relative px-8 py-4 bg-white text-black font-bold text-lg tracking-widest uppercase overflow-hidden rounded-full transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.4)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+              <div className="absolute inset-0 w-0 bg-pink-500 transition-all duration-[250ms] ease-out group-hover:w-full opacity-20" />
+              <span className="relative z-10 group-hover:text-pink-600 transition-colors">进入心域</span>
+            </button>
           </div>
         </div>
       )}
@@ -136,7 +198,15 @@ const App: React.FC = () => {
            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black z-0 pointer-events-none" />
            <div className="relative z-10 w-full h-full overflow-y-auto scrollbar-hide">
              <div className="max-w-[1600px] mx-auto p-6 md:p-12">
-                <header className="mb-8 text-center"><h2 className="text-4xl font-bold text-white mb-2">选择一个世界</h2><p className="text-slate-400">你想进入哪个时代，体验怎样的故事？</p></header>
+                <header className="mb-8 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-3xl md:text-4xl font-bold text-white mb-1">欢迎回来, <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">{gameState.userProfile?.nickname}</span></h2>
+                    <p className="text-slate-400">你想进入哪个时代，体验怎样的故事？</p>
+                  </div>
+                  {gameState.userProfile?.avatarUrl && (
+                    <img src={gameState.userProfile.avatarUrl} alt="User Avatar" className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-slate-700 shadow-lg"/>
+                  )}
+                </header>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-12">
                   {WORLD_SCENES.map(scene => <SceneCard key={scene.id} scene={scene} onSelect={() => handleSelectScene(scene.id)} />)}
                 </div>
@@ -208,13 +278,14 @@ const App: React.FC = () => {
 
       {gameState.currentScreen === 'builder' && (<ScenarioBuilder initialScenario={editingScenario} onSave={handleSaveScenario} onCancel={handleBackToCharacterSelection} />)}
 
-      {gameState.currentScreen === 'chat' && activeCharacter && (
+      {gameState.currentScreen === 'chat' && activeCharacter && gameState.userProfile && (
         <ChatWindow 
           character={activeCharacter}
           customScenario={activeScenario}
           history={gameState.history[activeScenario ? activeScenario.id : (activeCharacter.id || "")] || []}
           scenarioState={gameState.currentScenarioState}
           settings={gameState.settings}
+          userProfile={gameState.userProfile}
           onUpdateHistory={(msgs) => handleUpdateHistory(activeScenario ? activeScenario.id : (activeCharacter.id || ""), msgs)}
           onUpdateScenarioState={handleUpdateScenarioState}
           onBack={handleBackToCharacterSelection}

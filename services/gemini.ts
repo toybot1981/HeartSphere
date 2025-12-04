@@ -1,6 +1,6 @@
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality, Type } from "@google/genai";
-import { Message, Character, StoryNode, CustomScenario } from "../types";
-import { SCENARIO_CONTEXT } from "../constants";
+import { Message, Character, StoryNode, CustomScenario, UserProfile } from "../types";
+import { createScenarioContext } from "../constants";
 
 // Helper to sanitize history for the API
 const formatHistory = (history: Message[]) => {
@@ -43,11 +43,12 @@ export class GeminiService {
   }
 
   // Initialize or retrieve a chat session for a specific character
-  private getSession(character: Character, history: Message[]): Chat {
+  private getSession(character: Character, history: Message[], userProfile: UserProfile | null): Chat {
     if (!this.chatSessions.has(character.id)) {
       const historyForApi = formatHistory(history.filter(m => m.text)); 
       
-      const combinedInstruction = `${SCENARIO_CONTEXT}\n\nYOUR CHARACTER INSTRUCTION:\n${character.systemInstruction}`;
+      const scenarioContext = createScenarioContext(userProfile);
+      const combinedInstruction = `${scenarioContext}\n\nYOUR CHARACTER INSTRUCTION:\n${character.systemInstruction}`;
 
       const chat = this.ai.chats.create({
         model: 'gemini-2.5-flash',
@@ -68,10 +69,11 @@ export class GeminiService {
   async sendMessageStream(
     character: Character, 
     history: Message[], 
-    userMessage: string
+    userMessage: string,
+    userProfile: UserProfile | null
   ): Promise<AsyncIterable<GenerateContentResponse>> {
     return this.retry(async () => {
-      const chat = this.getSession(character, history);
+      const chat = this.getSession(character, history, userProfile);
       return chat.sendMessageStream({ message: userMessage });
     });
   }
@@ -82,13 +84,15 @@ export class GeminiService {
   async generateStoryBeatStream(
     node: StoryNode,
     previousHistory: Message[],
-    userChoiceText: string | null
+    userChoiceText: string | null,
+    userProfile: UserProfile | null
   ): Promise<AsyncIterable<GenerateContentResponse>> {
     return this.retry(async () => {
       const historyForApi = formatHistory(previousHistory.filter(m => m.text));
+      const scenarioContext = createScenarioContext(userProfile);
 
       const specificInstruction = `
-        ${SCENARIO_CONTEXT}
+        ${scenarioContext}
         
         ROLE: You are the narrator for a specific interactive story node.
         

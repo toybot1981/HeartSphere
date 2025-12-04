@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Character, Message, CustomScenario, AppSettings, StoryNode } from '../types';
+import { Character, Message, CustomScenario, AppSettings, StoryNode, UserProfile } from '../types';
 import { geminiService } from '../services/gemini';
 import { GenerateContentResponse } from '@google/genai';
 import { Button } from './Button';
@@ -10,13 +10,14 @@ interface ChatWindowProps {
   history: Message[];
   scenarioState?: { currentNodeId: string };
   settings: AppSettings;
+  userProfile: UserProfile;
   onUpdateHistory: (msgs: Message[]) => void;
   onUpdateScenarioState?: (nodeId: string) => void;
   onBack: () => void;
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({ 
-  character, customScenario, history, scenarioState, settings, onUpdateHistory, onUpdateScenarioState, onBack 
+  character, customScenario, history, scenarioState, settings, userProfile, onUpdateHistory, onUpdateScenarioState, onBack 
 }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -105,7 +106,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     }
 
     try {
-       const stream = await geminiService.generateStoryBeatStream(node, currentHistory, choiceText);
+       const stream = await geminiService.generateStoryBeatStream(node, currentHistory, choiceText, userProfile);
        let fullResponseText = '';
        let firstChunk = true;
        for await (const chunk of stream) {
@@ -156,7 +157,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     const tempBotId = `bot_${Date.now()}`;
     
     try {
-      const stream = await geminiService.sendMessageStream(character, currentHistory, userText);
+      const stream = await geminiService.sendMessageStream(character, currentHistory, userText, userProfile);
       let firstChunk = true;
       for await (const chunk of stream) {
         const chunkText = (chunk as GenerateContentResponse).text;

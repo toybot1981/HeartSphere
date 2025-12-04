@@ -70,8 +70,14 @@ export interface AppSettings {
   autoGenerateStoryScenes: boolean;
 }
 
+export interface UserProfile {
+  nickname: string;
+  avatarUrl: string;
+}
+
 export interface GameState {
-  currentScreen: 'home' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder';
+  currentScreen: 'profileSetup' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder';
+  userProfile: UserProfile | null;
   selectedSceneId: string | null;
   selectedCharacterId: string | null;
   selectedScenarioId: string | null;
