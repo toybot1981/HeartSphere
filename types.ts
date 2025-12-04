@@ -86,6 +86,7 @@ export interface GameState {
   customAvatars: Record<string, string>; 
   generatingAvatarId: string | null; 
   customScenarios: CustomScenario[];
+  customScenes: WorldScene[];
   currentScenarioState?: {
     scenarioId: string;
     currentNodeId: string;

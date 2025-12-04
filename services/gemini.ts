@@ -1,5 +1,5 @@
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality, Type } from "@google/genai";
-import { Message, Character, StoryNode, CustomScenario, UserProfile } from "../types";
+import { Message, Character, StoryNode, CustomScenario, UserProfile, WorldScene } from "../types";
 import { createScenarioContext } from "../constants";
 
 // Helper to sanitize history for the API
@@ -77,6 +77,67 @@ export class GeminiService {
       return chat.sendMessageStream({ message: userMessage });
     });
   }
+
+  // --- Era & Character Constructor ---
+  async generateCharacterFromPrompt(prompt: string, eraName: string): Promise<Character | null> {
+    return this.retry(async () => {
+       try {
+        // Step 1: Generate Character Details
+        const detailsResponse = await this.ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Based on the prompt "${prompt}" for a character in the world/era named "${eraName}", create a complete character profile.
+            - The character's name, bio, role, systemInstruction, and firstMessage MUST be in Chinese.
+            - The themeColor and colorAccent MUST be valid hex color codes (e.g., '#ff5733').
+            - The age should be a reasonable number.`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        name: { type: Type.STRING },
+                        age: { type: Type.NUMBER },
+                        role: { type: Type.STRING },
+                        bio: { type: Type.STRING },
+                        systemInstruction: { type: Type.STRING },
+                        firstMessage: { type: Type.STRING },
+                        themeColor: { type: Type.STRING },
+                        colorAccent: { type: Type.STRING },
+                    },
+                    required: ["name", "age", "role", "bio", "systemInstruction", "firstMessage", "themeColor", "colorAccent"]
+                }
+            }
+        });
+        
+        if (!detailsResponse.text) throw new Error("Failed to generate character details.");
+        const details = JSON.parse(detailsResponse.text);
+
+        // Step 2: Generate Avatar
+        const avatarPrompt = `High-quality vertical anime character portrait of ${details.name}. Description: ${details.bio}. Role: ${details.role}. Style: Modern Chinese Anime (Manhua), vibrant colors, detailed eyes. Centered character, abstract background matching theme color ${details.themeColor}.`;
+        const avatarUrl = await this.generateImageFromPrompt(avatarPrompt, '3:4');
+        if (!avatarUrl) throw new Error("Failed to generate character avatar.");
+
+        // Step 3: Generate Background
+        const backgroundPrompt = `Atmospheric anime background scene for the world of "${eraName}". It should match the personality of a character described as: "${details.bio}". Style: Modern Chinese Anime (Manhua), high quality, cinematic lighting.`;
+        const backgroundUrl = await this.generateImageFromPrompt(backgroundPrompt, '9:16');
+        if (!backgroundUrl) throw new Error("Failed to generate character background.");
+
+        // Step 4: Assemble Character
+        const newCharacter: Character = {
+            id: `custom_${Date.now()}`,
+            voiceName: 'Kore', // Default voice
+            ...details,
+            avatarUrl,
+            backgroundUrl
+        };
+        return newCharacter;
+
+      } catch (e) {
+        console.error("Full character generation from prompt failed", e);
+        throw e;
+      }
+    });
+  }
+
 
   // --- Custom Scenario Generation ---
   

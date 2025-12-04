@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { WORLD_SCENES, APP_TITLE, APP_SUBTITLE } from './constants';
+import { WORLD_SCENES } from './constants';
 import { ChatWindow } from './components/ChatWindow';
 import { ScenarioBuilder } from './components/ScenarioBuilder';
 import { SettingsModal } from './components/SettingsModal';
 import { CharacterCard } from './components/CharacterCard';
 import { SceneCard } from './components/SceneCard';
-import { Character, GameState, Message, CustomScenario, AppSettings } from './types';
+import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene } from './types';
 import { geminiService } from './services/gemini';
+import { EraConstructorModal } from './components/EraConstructorModal';
+import { CharacterConstructorModal } from './components/CharacterConstructorModal';
 
 const App: React.FC = () => {
   
@@ -35,10 +37,14 @@ const App: React.FC = () => {
     customAvatars: {},
     generatingAvatarId: null,
     customScenarios: [EXAMPLE_SCENARIO],
+    customScenes: [],
     settings: { autoGenerateAvatars: false, autoGenerateStoryScenes: false }
   });
   
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showEraCreator, setShowEraCreator] = useState(false);
+  const [showCharacterCreator, setShowCharacterCreator] = useState(false);
+
   const attemptedGenerations = useRef<Set<string>>(new Set());
 
   // States for profile setup screen
@@ -109,6 +115,26 @@ const App: React.FC = () => {
   const handleCreateScenario = () => setGameState(prev => ({...prev, editingScenarioId: null, currentScreen: 'builder' }));
   const handleEditScenario = (scenario: CustomScenario) => setGameState(prev => ({...prev, editingScenarioId: scenario.id, currentScreen: 'builder'}));
 
+  const handleSaveEra = (newScene: WorldScene) => {
+    setGameState(prev => ({ ...prev, customScenes: [...prev.customScenes, newScene]}));
+    setShowEraCreator(false);
+  }
+
+  const handleSaveCharacter = (newCharacter: Character) => {
+    if (!gameState.selectedSceneId) return;
+    setGameState(prev => {
+      const updatedCustomScenes = prev.customScenes.map(scene => {
+        if (scene.id === prev.selectedSceneId) {
+          return { ...scene, characters: [...scene.characters, newCharacter] };
+        }
+        return scene;
+      });
+      return { ...prev, customScenes: updatedCustomScenes };
+    });
+    setShowCharacterCreator(false);
+  }
+
+
   const handleUpdateHistory = (id: string, messages: Message[]) => {
     if (typeof id === 'string') {
         setGameState(prev => ({ ...prev, history: { ...prev.history, [id]: messages } }));
@@ -128,29 +154,33 @@ const App: React.FC = () => {
     });
   };
 
+  const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
+  const selectedScene = allScenes.find(s => s.id === gameState.selectedSceneId);
+  const isCustomScene = gameState.customScenes.some(s => s.id === gameState.selectedSceneId);
+
   const getChatTarget = () => {
-    const scene = WORLD_SCENES.find(s => s.id === gameState.selectedSceneId);
-    if (!scene) return { character: null, scenario: null };
+    if (!selectedScene) return { character: null, scenario: null };
 
     if (gameState.selectedScenarioId) {
       const scenario = gameState.customScenarios.find(s => s.id === gameState.selectedScenarioId);
-      return { character: scene.mainStory || scene.characters[0], scenario: scenario };
+      return { character: selectedScene.mainStory || selectedScene.characters[0], scenario: scenario };
     }
     
-    let character = scene.characters.find(c => c.id === gameState.selectedCharacterId);
-    if (!character && scene.mainStory?.id === gameState.selectedCharacterId) {
-      character = scene.mainStory;
+    let character = selectedScene.characters.find(c => c.id === gameState.selectedCharacterId);
+    if (!character && selectedScene.mainStory?.id === gameState.selectedCharacterId) {
+      character = selectedScene.mainStory;
     }
     return { character: character, scenario: undefined };
   };
 
   const { character: activeCharacter, scenario: activeScenario } = getChatTarget();
-  const selectedScene = WORLD_SCENES.find(s => s.id === gameState.selectedSceneId);
   const editingScenario = gameState.customScenarios.find(s => s.id === gameState.editingScenarioId);
 
   return (
     <div className="h-screen w-full bg-black text-white selection:bg-pink-500 selection:text-white overflow-hidden font-sans">
       {showSettingsModal && <SettingsModal settings={gameState.settings} onSettingsChange={handleSettingsChange} onClose={() => setShowSettingsModal(false)} />}
+      {showEraCreator && <EraConstructorModal onSave={handleSaveEra} onClose={() => setShowEraCreator(false)} />}
+      {showCharacterCreator && selectedScene && <CharacterConstructorModal scene={selectedScene} onSave={handleSaveCharacter} onClose={() => setShowCharacterCreator(false)} />}
       
       {gameState.currentScreen === 'profileSetup' && (
         <div className="relative h-full w-full flex flex-col items-center justify-center p-4">
@@ -208,7 +238,18 @@ const App: React.FC = () => {
                   )}
                 </header>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-12">
-                  {WORLD_SCENES.map(scene => <SceneCard key={scene.id} scene={scene} onSelect={() => handleSelectScene(scene.id)} />)}
+                  {allScenes.map(scene => <SceneCard key={scene.id} scene={scene} onSelect={() => handleSelectScene(scene.id)} />)}
+                   {/* Era Creator Card */}
+                  <div 
+                    onClick={() => setShowEraCreator(true)}
+                    className="group relative h-96 w-full cursor-pointer overflow-hidden rounded-3xl border-2 border-dashed border-slate-700 bg-slate-800/20 hover:border-purple-500 hover:bg-slate-800/50 transition-all flex flex-col items-center justify-center text-slate-500 hover:text-purple-400"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4 transition-transform group-hover:scale-110">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <h3 className="text-2xl font-bold">创建新时代</h3>
+                    <p className="text-sm">构建属于你的世界</p>
+                  </div>
                 </div>
              </div>
            </div>
@@ -270,6 +311,18 @@ const App: React.FC = () => {
                 <h3 className="text-2xl font-bold text-white/80 mb-6 border-b border-white/10 pb-2 inline-block">自由互动</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-12">
                   {selectedScene.characters.map(c => <CharacterCard key={c.id} character={c} customAvatarUrl={gameState.customAvatars[c.id]} onSelect={handleSelectCharacter} isGenerating={gameState.generatingAvatarId === c.id} onGenerate={handleGenerateAvatar} />)}
+                  {isCustomScene && (
+                     <div 
+                      onClick={() => setShowCharacterCreator(true)}
+                      className="group relative h-96 w-full cursor-pointer overflow-hidden rounded-3xl border-2 border-dashed border-slate-700 bg-slate-800/20 hover:border-pink-500 hover:bg-slate-800/50 transition-all flex flex-col items-center justify-center text-slate-500 hover:text-pink-400"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4 transition-transform group-hover:scale-110">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                      <h3 className="text-2xl font-bold">创建新角色</h3>
+                      <p className="text-sm">为这个时代注入灵魂</p>
+                    </div>
+                  )}
                 </div>
              </div>
            </div>
