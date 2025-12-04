@@ -75,8 +75,15 @@ export interface UserProfile {
   avatarUrl: string;
 }
 
+export interface JournalEntry {
+  id: string;
+  title: string;
+  content: string;
+  timestamp: number;
+}
+
 export interface GameState {
-  currentScreen: 'profileSetup' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder';
+  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder';
   userProfile: UserProfile | null;
   selectedSceneId: string | null;
   selectedCharacterId: string | null;
@@ -87,6 +94,8 @@ export interface GameState {
   generatingAvatarId: string | null; 
   customScenarios: CustomScenario[];
   customScenes: WorldScene[];
+  journalEntries: JournalEntry[];
+  currentQuestion: string | null;
   currentScenarioState?: {
     scenarioId: string;
     currentNodeId: string;

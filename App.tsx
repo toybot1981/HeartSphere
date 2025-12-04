@@ -5,10 +5,12 @@ import { ScenarioBuilder } from './components/ScenarioBuilder';
 import { SettingsModal } from './components/SettingsModal';
 import { CharacterCard } from './components/CharacterCard';
 import { SceneCard } from './components/SceneCard';
-import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene } from './types';
+import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene, JournalEntry } from './types';
 import { geminiService } from './services/gemini';
 import { EraConstructorModal } from './components/EraConstructorModal';
 import { CharacterConstructorModal } from './components/CharacterConstructorModal';
+import { EntryPoint } from './components/EntryPoint';
+import { RealWorldScreen } from './components/RealWorldScreen';
 
 const App: React.FC = () => {
   
@@ -38,6 +40,8 @@ const App: React.FC = () => {
     generatingAvatarId: null,
     customScenarios: [EXAMPLE_SCENARIO],
     customScenes: [],
+    journalEntries: [],
+    currentQuestion: null,
     settings: { autoGenerateAvatars: false, autoGenerateStoryScenes: false }
   });
   
@@ -90,7 +94,7 @@ const App: React.FC = () => {
     setGameState(prev => ({
         ...prev,
         userProfile: { nickname: nickname.trim(), avatarUrl },
-        currentScreen: 'sceneSelection'
+        currentScreen: 'entryPoint'
     }));
   };
 
@@ -105,11 +109,37 @@ const App: React.FC = () => {
     }
   }, [gameState.customAvatars, gameState.generatingAvatarId, gameState.settings.autoGenerateAvatars, gameState.currentScreen, gameState.selectedSceneId]);
 
+  const handleNavigate = (screen: GameState['currentScreen']) => setGameState(prev => ({ ...prev, currentScreen: screen }));
+  const handleBackToEntryPoint = () => setGameState(prev => ({ ...prev, currentScreen: 'entryPoint' }));
   const handleBackToSceneSelection = () => setGameState(prev => ({ ...prev, currentScreen: 'sceneSelection', selectedSceneId: null }));
   const handleBackToCharacterSelection = () => setGameState(prev => ({ ...prev, currentScreen: 'characterSelection', selectedCharacterId: null, selectedScenarioId: null, currentScenarioState: undefined }));
   
   const handleSelectScene = (sceneId: string) => setGameState(prev => ({...prev, selectedSceneId: sceneId, currentScreen: 'characterSelection'}));
-  const handleSelectCharacter = (character: Character) => setGameState(prev => ({ ...prev, currentScreen: 'chat', selectedCharacterId: character.id, selectedScenarioId: null }));
+  
+  const handleSelectCharacter = (character: Character) => {
+    const historyKey = character.id;
+    const newHistory = gameState.currentQuestion
+        ? [{
+            id: `user_q_${Date.now()}`,
+            role: 'user' as const,
+            text: gameState.currentQuestion,
+            timestamp: Date.now()
+          }]
+        : gameState.history[historyKey] || [];
+
+    setGameState(prev => ({
+        ...prev,
+        currentScreen: 'chat',
+        selectedCharacterId: character.id,
+        selectedScenarioId: null,
+        history: {
+            ...prev.history,
+            [historyKey]: newHistory,
+        },
+        currentQuestion: null
+    }));
+  };
+
   const handleSelectScenario = (scenario: CustomScenario) => setGameState(prev => ({ ...prev, currentScreen: 'chat', selectedScenarioId: scenario.id, selectedCharacterId: null, history: { ...prev.history, [scenario.id]: [] }, currentScenarioState: { scenarioId: scenario.id, currentNodeId: scenario.startNodeId } }));
   
   const handleCreateScenario = () => setGameState(prev => ({...prev, editingScenarioId: null, currentScreen: 'builder' }));
@@ -134,7 +164,6 @@ const App: React.FC = () => {
     setShowCharacterCreator(false);
   }
 
-
   const handleUpdateHistory = (id: string, messages: Message[]) => {
     if (typeof id === 'string') {
         setGameState(prev => ({ ...prev, history: { ...prev.history, [id]: messages } }));
@@ -152,6 +181,27 @@ const App: React.FC = () => {
         else newScenarios.push(scenarioWithSceneId);
         return { ...prev, customScenarios: newScenarios, currentScreen: 'characterSelection', editingScenarioId: null };
     });
+  };
+
+  const handleAddJournalEntry = (title: string, content: string) => {
+    const newEntry: JournalEntry = {
+      id: `journal_${Date.now()}`,
+      title,
+      content,
+      timestamp: Date.now()
+    };
+    setGameState(prev => ({
+      ...prev,
+      journalEntries: [...prev.journalEntries, newEntry]
+    }));
+  };
+
+  const handleExploreWithJournalEntry = (content: string) => {
+    setGameState(prev => ({
+      ...prev,
+      currentQuestion: content,
+      currentScreen: 'sceneSelection'
+    }));
   };
 
   const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
@@ -217,43 +267,65 @@ const App: React.FC = () => {
 
             <button onClick={handleConfirmProfile} disabled={!nickname.trim()} className="group relative px-8 py-4 bg-white text-black font-bold text-lg tracking-widest uppercase overflow-hidden rounded-full transition-all hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.4)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
               <div className="absolute inset-0 w-0 bg-pink-500 transition-all duration-[250ms] ease-out group-hover:w-full opacity-20" />
-              <span className="relative z-10 group-hover:text-pink-600 transition-colors">进入心域</span>
+              <span className="relative z-10 group-hover:text-pink-600 transition-colors">开启旅程</span>
             </button>
           </div>
         </div>
       )}
 
+      {gameState.currentScreen === 'entryPoint' && gameState.userProfile && (
+        <EntryPoint 
+          nickname={gameState.userProfile.nickname}
+          onNavigate={(screen) => handleNavigate(screen)} 
+        />
+      )}
+      
+      {gameState.currentScreen === 'realWorld' && (
+        <RealWorldScreen 
+          entries={gameState.journalEntries}
+          onAddEntry={handleAddJournalEntry}
+          onExplore={handleExploreWithJournalEntry}
+          onBack={handleBackToEntryPoint}
+        />
+      )}
+
       {gameState.currentScreen === 'sceneSelection' && (
-        <div className="h-full w-full flex flex-col relative bg-slate-900">
-           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black z-0 pointer-events-none" />
-           <div className="relative z-10 w-full h-full overflow-y-auto scrollbar-hide">
-             <div className="max-w-[1600px] mx-auto p-6 md:p-12">
-                <header className="mb-8 flex justify-between items-center">
+          <div className="h-full w-full flex flex-col bg-slate-900 overflow-y-auto scrollbar-hide">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black z-0 pointer-events-none" />
+            <div className="relative z-10 max-w-[1600px] mx-auto p-6 md:p-8 w-full">
+              <header className="mb-8 flex justify-between items-start">
                   <div>
-                    <h2 className="text-3xl md:text-4xl font-bold text-white mb-1">欢迎回来, <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">{gameState.userProfile?.nickname}</span></h2>
+                    <h3 className="text-3xl font-bold text-white/90 mb-2">心域 <span className="font-light text-2xl text-purple-400/80">HeartSphere</span></h3>
                     <p className="text-slate-400">你想进入哪个时代，体验怎样的故事？</p>
                   </div>
-                  {gameState.userProfile?.avatarUrl && (
-                    <img src={gameState.userProfile.avatarUrl} alt="User Avatar" className="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-slate-700 shadow-lg"/>
-                  )}
-                </header>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-12">
-                  {allScenes.map(scene => <SceneCard key={scene.id} scene={scene} onSelect={() => handleSelectScene(scene.id)} />)}
-                   {/* Era Creator Card */}
-                  <div 
-                    onClick={() => setShowEraCreator(true)}
-                    className="group relative h-96 w-full cursor-pointer overflow-hidden rounded-3xl border-2 border-dashed border-slate-700 bg-slate-800/20 hover:border-purple-500 hover:bg-slate-800/50 transition-all flex flex-col items-center justify-center text-slate-500 hover:text-purple-400"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4 transition-transform group-hover:scale-110">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    <h3 className="text-2xl font-bold">创建新时代</h3>
-                    <p className="text-sm">构建属于你的世界</p>
+                   <button onClick={handleBackToEntryPoint} className="px-4 py-2 bg-white/10 rounded-lg text-sm font-bold hover:bg-white/20 transition-colors">返回 Nexus</button>
+              </header>
+
+              {gameState.currentQuestion && (
+                 <div className="mb-6 bg-indigo-900/50 border border-indigo-700 text-indigo-200 px-4 py-3 rounded-lg flex justify-between items-center animate-fade-in">
+                  <div>
+                    <p className="text-xs font-bold uppercase">携带的问题</p>
+                    <p className="font-medium truncate">"{gameState.currentQuestion}"</p>
                   </div>
+                  <button onClick={() => setGameState(p => ({...p, currentQuestion: null}))} className="text-indigo-300 hover:text-white text-2xl">&times;</button>
                 </div>
-             </div>
-           </div>
-        </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 pb-12">
+                {allScenes.map(scene => <SceneCard key={scene.id} scene={scene} onSelect={() => handleSelectScene(scene.id)} />)}
+                <div 
+                  onClick={() => setShowEraCreator(true)}
+                  className="group relative h-96 w-full cursor-pointer overflow-hidden rounded-3xl border-2 border-dashed border-slate-700 bg-slate-800/20 hover:border-purple-500 hover:bg-slate-800/50 transition-all flex flex-col items-center justify-center text-slate-500 hover:text-purple-400"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4 transition-transform group-hover:scale-110">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  <h3 className="text-2xl font-bold">创建新时代</h3>
+                  <p className="text-sm">构建属于你的世界</p>
+                </div>
+              </div>
+            </div>
+          </div>
       )}
       
       {gameState.currentScreen === 'characterSelection' && selectedScene && (
