@@ -1,3 +1,4 @@
+
 // This file includes legacy types like 'Persona' to prevent errors in unused components,
 // but the main application logic relies on the 'WorldScene' architecture.
 export interface Persona {
@@ -56,6 +57,13 @@ export interface CustomScenario {
   author: string;
 }
 
+export interface EraMemory {
+  id: string;
+  content: string; // Text memory
+  imageUrl?: string; // Optional photo
+  timestamp: number;
+}
+
 export interface WorldScene {
   id: string;
   name: string;
@@ -63,6 +71,7 @@ export interface WorldScene {
   imageUrl: string;
   characters: Character[];
   mainStory?: Character;
+  memories?: EraMemory[]; // Personal memories specific to this era
 }
 
 export interface AppSettings {
@@ -75,11 +84,33 @@ export interface UserProfile {
   avatarUrl: string;
 }
 
+export interface JournalEcho {
+  characterName: string;
+  text: string;
+  timestamp: number;
+  imageUrl?: string; 
+}
+
 export interface JournalEntry {
   id: string;
   title: string;
   content: string;
   timestamp: number;
+  imageUrl?: string; // Mind Projection
+  echo?: JournalEcho; // Echoes of Wisdom
+  insight?: string; // Mirror of Truth (本我镜像)
+}
+
+export interface Mail {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl: string;
+  subject: string;
+  content: string;
+  timestamp: number;
+  isRead: boolean;
+  themeColor: string;
 }
 
 export interface GameState {
@@ -88,6 +119,10 @@ export interface GameState {
   selectedSceneId: string | null;
   selectedCharacterId: string | null;
   selectedScenarioId: string | null;
+  
+  // New field to hold the temporary narrator character for scenarios
+  tempStoryCharacter: Character | null;
+
   editingScenarioId: string | null;
   history: Record<string, Message[]>; 
   customAvatars: Record<string, string>; 
@@ -95,10 +130,13 @@ export interface GameState {
   customScenarios: CustomScenario[];
   customScenes: WorldScene[];
   journalEntries: JournalEntry[];
-  currentQuestion: string | null;
+  activeJournalEntryId: string | null; // Track which entry is currently being "explored"
   currentScenarioState?: {
     scenarioId: string;
     currentNodeId: string;
   };
   settings: AppSettings;
+  mailbox: Mail[]; // Chronos Mailbox
+  lastLoginTime: number; // For tracking offline duration
+  sceneMemories: Record<string, EraMemory[]>; // Map sceneId -> memories
 }

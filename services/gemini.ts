@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality, Type } from "@google/genai";
-import { Message, Character, StoryNode, CustomScenario, UserProfile, WorldScene } from "../types";
+import { Message, Character, StoryNode, CustomScenario, UserProfile, WorldScene, JournalEcho, JournalEntry } from "../types";
 import { createScenarioContext } from "../constants";
 
 // Helper to sanitize history for the API
@@ -73,8 +74,27 @@ export class GeminiService {
     userProfile: UserProfile | null
   ): Promise<AsyncIterable<GenerateContentResponse>> {
     return this.retry(async () => {
-      const chat = this.getSession(character, history, userProfile);
-      return chat.sendMessageStream({ message: userMessage });
+      try {
+        // Prepare history for session initialization.
+        // If the session needs to be created, we must NOT include the message we are about to send
+        // in the 'history' passed to chats.create(), otherwise the API sees two consecutive User messages.
+        let historyForInit = history;
+        if (history.length > 0) {
+            const lastMsg = history[history.length - 1];
+            // If the last message in history matches the one we are about to send, exclude it from init history
+            if (lastMsg.role === 'user' && lastMsg.text === userMessage) {
+                historyForInit = history.slice(0, -1);
+            }
+        }
+
+        const chat = this.getSession(character, historyForInit, userProfile);
+        return await chat.sendMessageStream({ message: userMessage });
+      } catch (e) {
+        // If an error occurs (e.g. history desync), invalidate the session so the next retry creates a fresh one.
+        console.warn(`Error in sendMessageStream for ${character.name}, resetting session.`, e);
+        this.chatSessions.delete(character.id);
+        throw e;
+      }
     });
   }
 
@@ -149,7 +169,18 @@ export class GeminiService {
     userProfile: UserProfile | null
   ): Promise<AsyncIterable<GenerateContentResponse>> {
     return this.retry(async () => {
-      const historyForApi = formatHistory(previousHistory.filter(m => m.text));
+      // Logic fix: If userChoiceText is provided, it was likely just added to previousHistory.
+      // We must exclude it from the API initialization history because the 'triggerMsg' below 
+      // ("我选择了: ...") acts as the User turn for this interaction.
+      let historyForApiSource = previousHistory;
+      if (userChoiceText && previousHistory.length > 0) {
+          const lastMsg = previousHistory[previousHistory.length - 1];
+          if (lastMsg.role === 'user' && lastMsg.text === userChoiceText) {
+              historyForApiSource = previousHistory.slice(0, -1);
+          }
+      }
+
+      const historyForApi = formatHistory(historyForApiSource.filter(m => m.text));
       const scenarioContext = createScenarioContext(userProfile);
 
       const specificInstruction = `
@@ -352,6 +383,217 @@ export class GeminiService {
       } catch (error) {
         console.warn("Speech generation failed silently, will retry:", error);
         throw error;
+      }
+    });
+  }
+
+  // --- Mind Projection: Generate abstract mood image from text ---
+  async generateMoodImage(text: string): Promise<string | null> {
+    return this.retry(async () => {
+      try {
+        // 1. Analyze mood
+        const analysisResponse = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: `Analyze the mood, emotions, and key imagery in this journal entry: "${text}". 
+          Create a prompt for an abstract, artistic anime-style illustration that represents these feelings. 
+          The prompt should describe colors, lighting, and abstract shapes. 
+          Format: Just the prompt text in English.`,
+        });
+        
+        const imagePrompt = analysisResponse.text;
+        if (!imagePrompt) return null;
+
+        // 2. Generate Image
+        const finalPrompt = `${imagePrompt}. Style: Abstract, Ethereal, Digital Art, Makoto Shinkai style clouds/lighting, Emotional, High Quality. No text.`;
+        return await this.generateImageFromPrompt(finalPrompt, '16:9');
+      } catch (e) {
+        console.error("Mood image generation failed", e);
+        return null;
+      }
+    });
+  }
+
+  // --- Echoes of Wisdom: Generate summary/insight from chat history ---
+  async generateWisdomEcho(history: Message[], characterName: string): Promise<string | null> {
+    return this.retry(async () => {
+      try {
+        const historyForApi = formatHistory(history.filter(m => m.text));
+        
+        const chat = this.ai.chats.create({
+            model: 'gemini-2.5-flash',
+            history: historyForApi
+        });
+
+        const result = await chat.sendMessage({
+            message: `(System Command) Please summarize your advice and feelings towards me in this conversation into one single, profound, and healing sentence. Keep it under 50 words. Do not use "User:" or "Model:" prefixes. Just the sentence.`
+        });
+
+        return result.text;
+      } catch (e) {
+        console.error("Echo generation failed", e);
+        return null;
+      }
+    });
+  }
+
+  // --- Mirror of Truth: Analyze subconscious patterns ---
+  async generateMirrorInsight(currentEntry: string, previousEntries: string[]): Promise<string | null> {
+    return this.retry(async () => {
+      try {
+        // Construct context from previous entries (last 5) to find patterns
+        const historyContext = previousEntries.length > 0 
+          ? `Recent Journal History:\n${previousEntries.join('\n---\n')}\n\n`
+          : '';
+
+        const prompt = `
+          ${historyContext}
+          Current Journal Entry: "${currentEntry}"
+
+          ROLE: You are the "Mirror of Truth" (本我镜像). You are NOT a roleplay character. You are a rational, objective, psychological reflector.
+          
+          TASK: 
+          1. Analyze the user's input (and history if provided) for subconscious patterns, recurring themes, cognitive distortions, or logical inconsistencies.
+          2. Do NOT comfort the user. Do NOT be emotional. Be cool and mirror-like.
+          3. Output a single, piercing insight or question that helps the user realize something about themselves.
+          4. Example: "You mentioned 'escape' 3 times this week. What are you avoiding?" or "You equate 'busy' with 'worth'. Is this logical?"
+          
+          CONSTRAINT:
+          - Output ONLY the insight text.
+          - Keep it under 50 words.
+          - Language: Chinese.
+        `;
+
+        const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+
+        return response.text;
+      } catch (e) {
+        console.error("Mirror insight generation failed", e);
+        return null;
+      }
+    });
+  }
+
+  // --- Chronos Mailbox: Generate offline letter ---
+  async generateChronosLetter(
+    character: Character, 
+    userProfile: UserProfile, 
+    recentJournalEntries: JournalEntry[]
+  ): Promise<{ subject: string; content: string } | null> {
+    return this.retry(async () => {
+      try {
+        const lastEntry = recentJournalEntries.length > 0 
+          ? recentJournalEntries.sort((a,b) => b.timestamp - a.timestamp)[0]
+          : null;
+        
+        const moodContext = lastEntry 
+          ? `User's latest journal mood: ${lastEntry.content.substring(0, 100)}...`
+          : `User hasn't written in the journal recently.`;
+
+        const prompt = `
+          ROLE: You are "${character.name}" from the era/role "${character.role}".
+          User Name: ${userProfile.nickname}
+          
+          CONTEXT:
+          The user has been "offline" (away from the HeartSphere) for a while. You are continuing your life in your world, but you missed them or wanted to share something.
+          ${moodContext}
+
+          TASK:
+          Write a short, warm, "handwritten" style letter to the user.
+          - If the user was sad in their journal, be comforting.
+          - If happy, share the joy.
+          - If neutral, share a slice of your daily life in your specific Era (e.g., if Cyberpunk, talk about neon rain; if University, talk about exams or cherry blossoms).
+          - Be IN CHARACTER. Use their tone.
+
+          OUTPUT FORMAT: JSON
+          {
+            "subject": "Short title for the letter (e.g., 'About yesterday...', 'It's raining here')",
+            "content": "The body of the letter. Keep it under 150 words. Emotional and immersive."
+          }
+        `;
+
+        const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    subject: { type: Type.STRING },
+                    content: { type: Type.STRING }
+                },
+                required: ["subject", "content"]
+            }
+          }
+        });
+
+        if (response.text) {
+             return JSON.parse(response.text);
+        }
+        return null;
+      } catch (e) {
+        console.error("Chronos letter generation failed", e);
+        return null;
+      }
+    });
+  }
+
+  // --- Era Analysis: Analyze image for era context ---
+  async analyzeImageForEra(base64Image: string): Promise<{ name: string; description: string } | null> {
+    return this.retry(async () => {
+      try {
+        const prompt = `
+          You are analyzing a user-uploaded image to create a "World Era" in a metaverse application.
+          This image might be:
+          1. A historical photo (e.g., 90s street, old event).
+          2. A personal memory (e.g., a specific room, a landscape).
+          3. A fictional artwork.
+
+          TASK:
+          Identify the probable era, year, atmosphere, or key event in the image.
+          Generate a concise, poetic title and description for this "Era".
+          
+          OUTPUT JSON:
+          {
+            "name": "Suggest a name (e.g. '1998世界杯之夏', '千禧年的老街', '赛博废墟')",
+            "description": "A 1-2 sentence description of the vibe, suitable for a world setting. (Chinese)"
+          }
+        `;
+        
+        // Strip the data:image/png;base64, prefix if present
+        const cleanBase64 = base64Image.split(',')[1];
+
+        const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: {
+            parts: [
+               { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
+               { text: prompt }
+            ]
+          },
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    name: { type: Type.STRING },
+                    description: { type: Type.STRING }
+                },
+                required: ["name", "description"]
+            }
+          }
+        });
+
+        if (response.text) {
+            return JSON.parse(response.text);
+        }
+        return null;
+      } catch (e) {
+        console.error("Era image analysis failed", e);
+        return null;
       }
     });
   }

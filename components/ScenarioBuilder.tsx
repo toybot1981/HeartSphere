@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { CustomScenario, StoryNode, StoryOption } from '../types';
 import { Button } from './Button';
@@ -139,7 +140,7 @@ export const ScenarioBuilder: React.FC<ScenarioBuilderProps> = ({ initialScenari
             <button onClick={addNode} className="text-xs bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded">+ 添加</button>
           </div>
           <div className="space-y-2">
-            {Object.values(nodes).map(node => (
+            {Object.values(nodes).map((node: StoryNode) => (
               <div key={node.id} onClick={() => setSelectedNodeId(node.id)} className={`p-3 rounded-lg cursor-pointer border transition-all ${selectedNodeId === node.id ? 'bg-pink-500/20 border-pink-500' : 'bg-gray-800 border-transparent hover:border-gray-600'}`}>
                 <div className="font-medium text-sm truncate">{node.title}</div>
                 <div className="text-xs text-gray-500">{node.options.length} 个分支</div>
@@ -181,7 +182,7 @@ export const ScenarioBuilder: React.FC<ScenarioBuilderProps> = ({ initialScenari
                         <div>
                           <label className="text-xs text-gray-500">跳转至节点</label>
                           <select value={opt.nextNodeId} onChange={e => updateOption(idx, 'nextNodeId', e.target.value)} className="w-full bg-gray-900 rounded px-2 py-1 border border-gray-700 text-sm">
-                            {Object.values(nodes).map(n => (<option key={n.id} value={n.id}>{n.title}</option>))}
+                            {Object.values(nodes).map((n: StoryNode) => (<option key={n.id} value={n.id}>{n.title}</option>))}
                           </select>
                         </div>
                       </div>
