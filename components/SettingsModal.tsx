@@ -90,7 +90,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
 
   // Helper to update specific provider config
   const updateProviderConfig = (provider: AIProvider, key: string, value: string) => {
-      const configKey = provider === 'gemini' ? 'geminiConfig' : provider === 'openai' ? 'openaiConfig' : 'qwenConfig';
+      const configKey = provider === 'gemini' ? 'geminiConfig' : provider === 'openai' ? 'openaiConfig' : provider === 'doubao' ? 'doubaoConfig' : 'qwenConfig';
       const currentConfig = settings[configKey];
       onSettingsChange({
           ...settings,
@@ -146,6 +146,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                         enabled={settings.autoGenerateStoryScenes}
                         onChange={(enabled) => onSettingsChange({ ...settings, autoGenerateStoryScenes: enabled })}
                     />
+                    <Toggle 
+                        label="开发者调试模式"
+                        description="在屏幕底部显示实时 AI 请求/响应日志。"
+                        enabled={settings.debugMode}
+                        onChange={(enabled) => onSettingsChange({ ...settings, debugMode: enabled })}
+                    />
                 </div>
             )}
 
@@ -155,18 +161,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                     {/* Provider Selection */}
                     <div>
                         <label className="block text-sm font-bold text-gray-400 mb-2">当前 AI 提供商</label>
-                        <div className="grid grid-cols-3 gap-2">
-                             {(['gemini', 'openai', 'qwen'] as AIProvider[]).map(provider => (
+                        <div className="grid grid-cols-4 gap-2">
+                             {(['gemini', 'openai', 'qwen', 'doubao'] as AIProvider[]).map(provider => (
                                  <button
                                     key={provider}
                                     onClick={() => onSettingsChange({ ...settings, activeProvider: provider })}
-                                    className={`py-2 rounded-lg text-sm font-bold border transition-all ${
+                                    className={`py-2 rounded-lg text-xs md:text-sm font-bold border transition-all ${
                                         settings.activeProvider === provider 
                                         ? 'bg-pink-600 border-pink-400 text-white' 
                                         : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
                                     }`}
                                  >
-                                     {provider === 'gemini' ? 'Gemini' : provider === 'openai' ? 'ChatGPT' : '通义千问'}
+                                     {provider === 'gemini' ? 'Gemini' : provider === 'openai' ? 'ChatGPT' : provider === 'qwen' ? '通义千问' : '豆包'}
                                  </button>
                              ))}
                         </div>
@@ -267,6 +273,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                                     placeholder="qwen-plus, qwen-max..."
                                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
                                 />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Doubao Config */}
+                    {settings.activeProvider === 'doubao' && (
+                        <div className="space-y-3 bg-gray-900/50 p-4 rounded-xl border border-gray-700 animate-fade-in">
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs text-gray-500">API Key (Volcengine)</label>
+                                    <a 
+                                        href="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-pink-400 hover:text-pink-300 text-xs flex items-center gap-1"
+                                        title="前往火山引擎控制台获取"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+                                        </svg>
+                                        获取 Key
+                                    </a>
+                                </div>
+                                <input 
+                                    type="password" 
+                                    value={settings.doubaoConfig?.apiKey}
+                                    onChange={(e) => updateProviderConfig('doubao', 'apiKey', e.target.value)}
+                                    placeholder="sk-..."
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">Base URL</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.doubaoConfig?.baseUrl}
+                                    onChange={(e) => updateProviderConfig('doubao', 'baseUrl', e.target.value)}
+                                    placeholder="https://ark.cn-beijing.volces.com/api/v3"
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                             <div>
+                                <label className="block text-xs text-gray-500 mb-1">Endpoint ID / Model Name</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.doubaoConfig?.modelName}
+                                    onChange={(e) => updateProviderConfig('doubao', 'modelName', e.target.value)}
+                                    placeholder="ep-202406... (接入点 ID)"
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                                <p className="text-[10px] text-gray-600 mt-1">请在火山引擎控制台创建推理接入点，填入 Endpoint ID。</p>
                             </div>
                         </div>
                     )}

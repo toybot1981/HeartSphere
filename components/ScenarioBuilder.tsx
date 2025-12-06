@@ -86,9 +86,15 @@ export const ScenarioBuilder: React.FC<ScenarioBuilderProps> = ({ initialScenari
         setSelectedNodeId(scenario.startNodeId);
         setShowMagicModal(false);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("生成失败，请重试（可能是请求过多，请稍等）");
+      let errorMsg = "生成失败，请稍后重试。";
+      if (e?.status === 429 || e?.message?.includes('429') || e?.message?.includes('quota') || e?.message?.includes('RESOURCE_EXHAUSTED')) {
+          errorMsg = "API 配额已耗尽或请求过于频繁 (429)。请在设置中检查您的 API Key，或稍作休息后重试。";
+      } else if (e?.message?.includes('API config missing')) {
+          errorMsg = "未配置 API Key。请前往设置 > AI 模型，输入您选择的模型的 API Key。";
+      }
+      alert(errorMsg);
     } finally {
       setIsMagicLoading(false);
     }
@@ -100,7 +106,7 @@ export const ScenarioBuilder: React.FC<ScenarioBuilderProps> = ({ initialScenari
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-fade-in">
             <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-pink-400 mb-4">AI 一键生成剧本</h3>
-            <p className="text-sm text-gray-400 mb-4">输入一个简单的想法（例如：“一个关于在闹鬼的图书馆里寻找丢失书籍的恐怖故事”），Gemini 将为您构建完整的剧情分支。</p>
+            <p className="text-sm text-gray-400 mb-4">输入一个简单的想法（例如：“一个关于在闹鬼的图书馆里寻找丢失书籍的恐怖故事”），AI 将为您构建完整的剧情分支。</p>
             <textarea value={magicPrompt} onChange={e => setMagicPrompt(e.target.value)} placeholder="在这里输入你的创意..." className="w-full h-32 bg-gray-900 border border-gray-700 rounded-xl p-4 text-white placeholder-gray-600 focus:border-indigo-500 outline-none resize-none mb-6" disabled={isMagicLoading} />
             <div className="flex justify-end gap-3">
               <Button variant="ghost" onClick={() => setShowMagicModal(false)} disabled={isMagicLoading}>取消</Button>

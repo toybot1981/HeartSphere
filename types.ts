@@ -74,7 +74,7 @@ export interface WorldScene {
   memories?: EraMemory[]; // Personal memories specific to this era
 }
 
-export type AIProvider = 'gemini' | 'openai' | 'qwen';
+export type AIProvider = 'gemini' | 'openai' | 'qwen' | 'doubao';
 
 export interface ModelConfig {
   apiKey: string;
@@ -85,12 +85,14 @@ export interface ModelConfig {
 export interface AppSettings {
   autoGenerateAvatars: boolean;
   autoGenerateStoryScenes: boolean;
+  debugMode: boolean; // New Debug Toggle
   
   // AI Model Configuration
   activeProvider: AIProvider;
   geminiConfig: ModelConfig;
   openaiConfig: ModelConfig;
   qwenConfig: ModelConfig;
+  doubaoConfig: ModelConfig;
 }
 
 export interface UserProfile {
@@ -127,6 +129,17 @@ export interface Mail {
   themeColor: string;
 }
 
+// Debug Logging Structure
+export interface DebugLog {
+  id: string;
+  timestamp: number;
+  provider: string;
+  model?: string; // Specific model name used
+  method: string;
+  type: string;
+  data: any;
+}
+
 export interface GameState {
   currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder';
   userProfile: UserProfile | null;
@@ -153,4 +166,6 @@ export interface GameState {
   mailbox: Mail[]; // Chronos Mailbox
   lastLoginTime: number; // For tracking offline duration
   sceneMemories: Record<string, EraMemory[]>; // Map sceneId -> memories
+  
+  debugLogs: DebugLog[]; // Store runtime logs
 }

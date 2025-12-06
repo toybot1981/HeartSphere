@@ -6,7 +6,7 @@ import { ScenarioBuilder } from './components/ScenarioBuilder';
 import { SettingsModal } from './components/SettingsModal';
 import { CharacterCard } from './components/CharacterCard';
 import { SceneCard } from './components/SceneCard';
-import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene, JournalEntry, JournalEcho, Mail, EraMemory } from './types';
+import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene, JournalEntry, JournalEcho, Mail, EraMemory, DebugLog } from './types';
 import { geminiService } from './services/gemini';
 import { storageService } from './services/storage';
 import { EraConstructorModal } from './components/EraConstructorModal';
@@ -16,6 +16,7 @@ import { RealWorldScreen } from './components/RealWorldScreen';
 import { MailboxModal } from './components/MailboxModal';
 import { EraMemoryModal } from './components/EraMemoryModal';
 import { Button } from './components/Button';
+import { DebugConsole } from './components/DebugConsole';
 
 const App: React.FC = () => {
   
@@ -52,14 +53,17 @@ const App: React.FC = () => {
     settings: { 
       autoGenerateAvatars: false, 
       autoGenerateStoryScenes: false,
+      debugMode: false,
       activeProvider: 'gemini',
       geminiConfig: { apiKey: '', modelName: 'gemini-2.5-flash' },
       openaiConfig: { apiKey: '', baseUrl: 'https://api.openai.com/v1', modelName: 'gpt-4o' },
-      qwenConfig: { apiKey: '', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', modelName: 'qwen-plus' }
+      qwenConfig: { apiKey: '', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', modelName: 'qwen-plus' },
+      doubaoConfig: { apiKey: '', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', modelName: 'ep-20240604052345-xxxxx' } // Volcengine default base URL
     },
     mailbox: [],
     lastLoginTime: Date.now(),
     sceneMemories: {}, 
+    debugLogs: [],
   };
 
   const [gameState, setGameState] = useState<GameState>(DEFAULT_STATE);
@@ -88,10 +92,17 @@ const App: React.FC = () => {
     const init = async () => {
         const loadedState = await storageService.loadState();
         if (loadedState) {
-          // Merge defaults with loaded state to ensure new config fields exist
+          const savedSettings = (loadedState.settings || {}) as Partial<AppSettings>;
+          
+          // Deep merge to ensure new providers exist in settings even if loading legacy state
           const mergedSettings: AppSettings = {
               ...DEFAULT_STATE.settings,
-              ...(loadedState.settings || {})
+              ...savedSettings,
+              // Merge individual configs to preserve defaults for new fields if missing in saved
+              geminiConfig: { ...DEFAULT_STATE.settings.geminiConfig, ...(savedSettings.geminiConfig || {}) },
+              openaiConfig: { ...DEFAULT_STATE.settings.openaiConfig, ...(savedSettings.openaiConfig || {}) },
+              qwenConfig: { ...DEFAULT_STATE.settings.qwenConfig, ...(savedSettings.qwenConfig || {}) },
+              doubaoConfig: { ...DEFAULT_STATE.settings.doubaoConfig, ...(savedSettings.doubaoConfig || {}) },
           };
 
           setGameState(prev => ({
@@ -105,6 +116,7 @@ const App: React.FC = () => {
             mailbox: loadedState.mailbox || [],
             lastLoginTime: loadedState.lastLoginTime || Date.now(),
             sceneMemories: loadedState.sceneMemories || {},
+            debugLogs: [], // Always start clear on reload
             settings: mergedSettings
           }));
           
@@ -134,6 +146,17 @@ const App: React.FC = () => {
 
     return () => clearTimeout(timer);
   }, [gameState, isLoaded]);
+
+  // --- DEBUG LOGGING HOOK ---
+  useEffect(() => {
+      geminiService.setLogCallback((log: DebugLog) => {
+          setGameState(prev => ({
+              ...prev,
+              debugLogs: [...prev.debugLogs, log]
+          }));
+      });
+  }, []);
+
 
   // --- CHRONOS MAILBOX CHECK ---
   useEffect(() => {
@@ -353,6 +376,7 @@ const App: React.FC = () => {
 
   const handleDeleteEra = (sceneId: string, e: React.MouseEvent) => {
       e.stopPropagation();
+      e.preventDefault();
       if(window.confirm("确定要删除这个时代吗？里面的所有角色和记忆都将消失。")) {
           setGameState(prev => ({
               ...prev,
@@ -402,16 +426,21 @@ const App: React.FC = () => {
 
   const handleDeleteScenario = (scenarioId: string, e: React.MouseEvent) => {
       e.stopPropagation(); // Prevent card click
+      e.preventDefault();
       if (window.confirm("确定要删除这个剧本吗？")) {
           setGameState(prev => ({
               ...prev,
-              customScenarios: prev.customScenarios.filter(s => s.id !== scenarioId)
+              customScenarios: prev.customScenarios.filter(s => s.id !== scenarioId),
+              // Clear editing state if deleting the active one
+              editingScenarioId: prev.editingScenarioId === scenarioId ? null : prev.editingScenarioId,
+              selectedScenarioId: prev.selectedScenarioId === scenarioId ? null : prev.selectedScenarioId
           }));
       }
   };
 
   const handleEditScenario = (scenario: CustomScenario, e: React.MouseEvent) => {
       e.stopPropagation(); // Prevent card click
+      e.preventDefault();
       setGameState(prev => ({
           ...prev,
           editingScenarioId: scenario.id,
@@ -658,7 +687,7 @@ const App: React.FC = () => {
                         
                         {/* Custom Era Actions (Edit/Delete) - Only for custom scenes */}
                         {isCustom && (
-                            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-30">
                                 <button 
                                 onClick={(e) => { e.stopPropagation(); setEditingScene(scene); setShowEraCreator(true); }}
                                 className="p-2 bg-black/60 rounded-full hover:bg-white/20 border border-white/20 text-white"
@@ -727,7 +756,7 @@ const App: React.FC = () => {
                                 <h4 className="font-bold text-white hover:text-purple-400 transition-colors">{scenario.title}</h4>
                                 <p className="text-xs text-gray-500 line-clamp-1">{scenario.description}</p>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 z-10">
                                 <button onClick={(e) => handleEditScenario(scenario, e)} className="text-gray-500 hover:text-white" title="编辑">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                                 </button>
@@ -797,6 +826,15 @@ const App: React.FC = () => {
               ...prev, currentScenarioState: { scenarioId: currentScenario.id, currentNodeId: nodeId }
           })) : undefined}
         />
+      )}
+
+      {/* DEBUG CONSOLE */}
+      {gameState.settings.debugMode && (
+          <DebugConsole 
+            logs={gameState.debugLogs}
+            onClear={() => setGameState(prev => ({ ...prev, debugLogs: [] }))}
+            onClose={() => setGameState(prev => ({ ...prev, settings: { ...prev.settings, debugMode: false } }))}
+          />
       )}
 
       {/* MODALS */}
