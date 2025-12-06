@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { AppSettings, GameState } from '../types';
+import { AppSettings, GameState, AIProvider } from '../types';
 import { Button } from './Button';
 import { storageService } from '../services/storage';
 
@@ -27,6 +27,7 @@ const Toggle: React.FC<{ label: string; description: string; enabled: boolean; o
 export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [backupMsg, setBackupMsg] = useState('');
+  const [activeTab, setActiveTab] = useState<'general' | 'models' | 'backup'>('general');
 
   const handleExportBackup = () => {
     // We use the current in-memory state for export, which is the most up-to-date
@@ -87,61 +88,223 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
     reader.readAsText(file);
   };
 
+  // Helper to update specific provider config
+  const updateProviderConfig = (provider: AIProvider, key: string, value: string) => {
+      const configKey = provider === 'gemini' ? 'geminiConfig' : provider === 'openai' ? 'openaiConfig' : 'qwenConfig';
+      const currentConfig = settings[configKey];
+      onSettingsChange({
+          ...settings,
+          [configKey]: { ...currentConfig, [key]: value }
+      });
+  };
+
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
+      <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+        <div className="flex justify-between items-center mb-6 shrink-0">
             <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-pink-400">
             系统设置
             </h3>
             <button onClick={onClose} className="text-gray-500 hover:text-white text-2xl">&times;</button>
         </div>
+
+        {/* Tab Navigation */}
+        <div className="flex border-b border-gray-700 mb-6 shrink-0">
+            <button 
+                onClick={() => setActiveTab('general')}
+                className={`flex-1 pb-3 text-sm font-bold transition-colors ${activeTab === 'general' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500 hover:text-white'}`}
+            >
+                通用设置
+            </button>
+            <button 
+                onClick={() => setActiveTab('models')}
+                className={`flex-1 pb-3 text-sm font-bold transition-colors ${activeTab === 'models' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500 hover:text-white'}`}
+            >
+                AI 模型
+            </button>
+            <button 
+                onClick={() => setActiveTab('backup')}
+                className={`flex-1 pb-3 text-sm font-bold transition-colors ${activeTab === 'backup' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500 hover:text-white'}`}
+            >
+                记忆备份
+            </button>
+        </div>
         
-        <div className="space-y-4 mb-8">
-            <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">通用设置</h4>
-            <Toggle 
-                label="自动生成首页形象"
-                description="开启后，进入选择页会自动为角色生成新的AI形象。关闭可节省Token。"
-                enabled={settings.autoGenerateAvatars}
-                onChange={(enabled) => onSettingsChange({ ...settings, autoGenerateAvatars: enabled })}
-            />
-            <Toggle 
-                label="自动生成故事场景"
-                description="开启后，在故事模式中会自动生成与情节匹配的背景图片。关闭可节省Token。"
-                enabled={settings.autoGenerateStoryScenes}
-                onChange={(enabled) => onSettingsChange({ ...settings, autoGenerateStoryScenes: enabled })}
-            />
+        <div className="overflow-y-auto pr-2 custom-scrollbar space-y-4">
+            {/* GENERAL TAB */}
+            {activeTab === 'general' && (
+                <div className="space-y-4">
+                    <Toggle 
+                        label="自动生成首页形象"
+                        description="开启后，进入选择页会自动为角色生成新的AI形象。关闭可节省Token。"
+                        enabled={settings.autoGenerateAvatars}
+                        onChange={(enabled) => onSettingsChange({ ...settings, autoGenerateAvatars: enabled })}
+                    />
+                    <Toggle 
+                        label="自动生成故事场景"
+                        description="开启后，在故事模式中会自动生成与情节匹配的背景图片。关闭可节省Token。"
+                        enabled={settings.autoGenerateStoryScenes}
+                        onChange={(enabled) => onSettingsChange({ ...settings, autoGenerateStoryScenes: enabled })}
+                    />
+                </div>
+            )}
+
+            {/* MODELS TAB */}
+            {activeTab === 'models' && (
+                <div className="space-y-6">
+                    {/* Provider Selection */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-400 mb-2">当前 AI 提供商</label>
+                        <div className="grid grid-cols-3 gap-2">
+                             {(['gemini', 'openai', 'qwen'] as AIProvider[]).map(provider => (
+                                 <button
+                                    key={provider}
+                                    onClick={() => onSettingsChange({ ...settings, activeProvider: provider })}
+                                    className={`py-2 rounded-lg text-sm font-bold border transition-all ${
+                                        settings.activeProvider === provider 
+                                        ? 'bg-pink-600 border-pink-400 text-white' 
+                                        : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
+                                    }`}
+                                 >
+                                     {provider === 'gemini' ? 'Gemini' : provider === 'openai' ? 'ChatGPT' : '通义千问'}
+                                 </button>
+                             ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                            * 注意：部分功能（如图片生成、语音）目前仅在 Gemini 下提供最佳支持。其他模型将仅用于文本对话。
+                        </p>
+                    </div>
+
+                    {/* Gemini Config */}
+                    {settings.activeProvider === 'gemini' && (
+                        <div className="space-y-3 bg-gray-900/50 p-4 rounded-xl border border-gray-700 animate-fade-in">
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">API Key (Google AI Studio)</label>
+                                <input 
+                                    type="password" 
+                                    value={settings.geminiConfig.apiKey}
+                                    onChange={(e) => updateProviderConfig('gemini', 'apiKey', e.target.value)}
+                                    placeholder="默认使用环境变量，在此覆盖..."
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">Model Name</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.geminiConfig.modelName}
+                                    onChange={(e) => updateProviderConfig('gemini', 'modelName', e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* OpenAI Config */}
+                    {settings.activeProvider === 'openai' && (
+                        <div className="space-y-3 bg-gray-900/50 p-4 rounded-xl border border-gray-700 animate-fade-in">
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">API Key</label>
+                                <input 
+                                    type="password" 
+                                    value={settings.openaiConfig.apiKey}
+                                    onChange={(e) => updateProviderConfig('openai', 'apiKey', e.target.value)}
+                                    placeholder="sk-..."
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">Base URL (Optional)</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.openaiConfig.baseUrl}
+                                    onChange={(e) => updateProviderConfig('openai', 'baseUrl', e.target.value)}
+                                    placeholder="https://api.openai.com/v1"
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">Model Name</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.openaiConfig.modelName}
+                                    onChange={(e) => updateProviderConfig('openai', 'modelName', e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Qwen Config */}
+                    {settings.activeProvider === 'qwen' && (
+                        <div className="space-y-3 bg-gray-900/50 p-4 rounded-xl border border-gray-700 animate-fade-in">
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">API Key (DashScope)</label>
+                                <input 
+                                    type="password" 
+                                    value={settings.qwenConfig.apiKey}
+                                    onChange={(e) => updateProviderConfig('qwen', 'apiKey', e.target.value)}
+                                    placeholder="sk-..."
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">Base URL (OpenAI Compatible)</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.qwenConfig.baseUrl}
+                                    onChange={(e) => updateProviderConfig('qwen', 'baseUrl', e.target.value)}
+                                    placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                             <div>
+                                <label className="block text-xs text-gray-500 mb-1">Model Name</label>
+                                <input 
+                                    type="text" 
+                                    value={settings.qwenConfig.modelName}
+                                    onChange={(e) => updateProviderConfig('qwen', 'modelName', e.target.value)}
+                                    placeholder="qwen-plus, qwen-max..."
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* BACKUP TAB */}
+            {activeTab === 'backup' && (
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-400">将您的角色、剧本和日记数据导出到本地，或从之前的备份中恢复。</p>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Button variant="secondary" onClick={handleExportBackup} className="border-green-500/30 text-green-300 hover:bg-green-500/10">
+                            <span className="flex items-center justify-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                导出备份
+                            </span>
+                        </Button>
+                        <Button variant="secondary" onClick={handleImportClick} className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10">
+                            <span className="flex items-center justify-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                读取备份
+                            </span>
+                        </Button>
+                        {/* Hidden File Input */}
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            onChange={handleFileChange} 
+                            accept="application/json" 
+                            className="hidden" 
+                        />
+                    </div>
+                    {backupMsg && <p className="text-center text-xs text-green-400 animate-fade-in">{backupMsg}</p>}
+                </div>
+            )}
         </div>
 
-        <div className="space-y-4 pt-4 border-t border-gray-700">
-            <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">记忆归档 (本地备份)</h4>
-            <div className="grid grid-cols-2 gap-4">
-                <Button variant="secondary" onClick={handleExportBackup} className="border-green-500/30 text-green-300 hover:bg-green-500/10">
-                    <span className="flex items-center justify-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                        导出备份
-                    </span>
-                </Button>
-                <Button variant="secondary" onClick={handleImportClick} className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10">
-                     <span className="flex items-center justify-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                        读取备份
-                    </span>
-                </Button>
-                {/* Hidden File Input */}
-                <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    onChange={handleFileChange} 
-                    accept="application/json" 
-                    className="hidden" 
-                />
-            </div>
-            {backupMsg && <p className="text-center text-xs text-green-400 animate-fade-in">{backupMsg}</p>}
-            <p className="text-xs text-gray-500 text-center">备份文件 (.json) 将存储在您的本地设备上。</p>
-        </div>
-
-        <div className="mt-8 text-center pt-4 border-t border-gray-700">
+        <div className="mt-8 text-center pt-4 border-t border-gray-700 shrink-0">
             <Button onClick={onClose} className="bg-indigo-600 hover:bg-indigo-500 w-full">
                 关闭
             </Button>

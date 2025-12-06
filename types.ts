@@ -74,9 +74,23 @@ export interface WorldScene {
   memories?: EraMemory[]; // Personal memories specific to this era
 }
 
+export type AIProvider = 'gemini' | 'openai' | 'qwen';
+
+export interface ModelConfig {
+  apiKey: string;
+  baseUrl?: string; // Optional for custom endpoints
+  modelName: string;
+}
+
 export interface AppSettings {
   autoGenerateAvatars: boolean;
   autoGenerateStoryScenes: boolean;
+  
+  // AI Model Configuration
+  activeProvider: AIProvider;
+  geminiConfig: ModelConfig;
+  openaiConfig: ModelConfig;
+  qwenConfig: ModelConfig;
 }
 
 export interface UserProfile {

@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { WORLD_SCENES } from './constants';
 import { ChatWindow } from './components/ChatWindow';
@@ -50,7 +49,14 @@ const App: React.FC = () => {
     customScenes: [],
     journalEntries: [],
     activeJournalEntryId: null,
-    settings: { autoGenerateAvatars: false, autoGenerateStoryScenes: false },
+    settings: { 
+      autoGenerateAvatars: false, 
+      autoGenerateStoryScenes: false,
+      activeProvider: 'gemini',
+      geminiConfig: { apiKey: '', modelName: 'gemini-2.5-flash' },
+      openaiConfig: { apiKey: '', baseUrl: 'https://api.openai.com/v1', modelName: 'gpt-4o' },
+      qwenConfig: { apiKey: '', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', modelName: 'qwen-plus' }
+    },
     mailbox: [],
     lastLoginTime: Date.now(),
     sceneMemories: {}, 
@@ -82,6 +88,12 @@ const App: React.FC = () => {
     const init = async () => {
         const loadedState = await storageService.loadState();
         if (loadedState) {
+          // Merge defaults with loaded state to ensure new config fields exist
+          const mergedSettings: AppSettings = {
+              ...DEFAULT_STATE.settings,
+              ...(loadedState.settings || {})
+          };
+
           setGameState(prev => ({
             ...prev,
             ...loadedState,
@@ -93,7 +105,14 @@ const App: React.FC = () => {
             mailbox: loadedState.mailbox || [],
             lastLoginTime: loadedState.lastLoginTime || Date.now(),
             sceneMemories: loadedState.sceneMemories || {},
+            settings: mergedSettings
           }));
+          
+          // Initialize Service with settings
+          geminiService.updateConfig(mergedSettings);
+        } else {
+          // Init default
+          geminiService.updateConfig(DEFAULT_STATE.settings);
         }
         setIsLoaded(true);
     };
@@ -103,6 +122,9 @@ const App: React.FC = () => {
   // 2. Save on change (Debounced)
   useEffect(() => {
     if (!isLoaded) return; 
+
+    // Update service whenever settings change
+    geminiService.updateConfig(gameState.settings);
 
     const timer = setTimeout(() => {
       // Update lastLoginTime on every save to track activity
@@ -293,12 +315,6 @@ const App: React.FC = () => {
 
   const handleGenerateAvatar = async (character: Character) => {
     if (gameState.generatingAvatarId) return;
-    
-    // Check local custom avatars first
-    if (gameState.customAvatars[character.id]) {
-       // Already have one, maybe user wants to regenerate? For now let's just use it or regen.
-    }
-
     setGameState(prev => ({ ...prev, generatingAvatarId: character.id }));
     try {
       const newAvatarUrl = await geminiService.generateCharacterImage(character);
@@ -320,13 +336,11 @@ const App: React.FC = () => {
     setGameState(prev => {
         const exists = prev.customScenes.some(s => s.id === newScene.id);
         if (exists) {
-            // Update existing
             return {
                 ...prev,
                 customScenes: prev.customScenes.map(s => s.id === newScene.id ? newScene : s)
             };
         } else {
-            // Add new
             return {
                 ...prev,
                 customScenes: [...prev.customScenes, newScene]
@@ -408,37 +422,33 @@ const App: React.FC = () => {
   const handlePlayScenario = (scenario: CustomScenario) => {
       const startNode = scenario.nodes[scenario.startNodeId];
       
-      // FIX: Find the current scene to get its background image
       const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
       const scene = allScenes.find(s => s.id === gameState.selectedSceneId);
       const sceneImage = scene?.imageUrl || 'https://picsum.photos/seed/default_bg/1080/1920';
 
-      // Create a dummy character for the scenario narrator
       const narrator: Character = {
           id: `narrator_${scenario.id}`,
           name: '旁白',
           age: 0,
           role: 'Narrator',
           bio: 'AI Narrator',
-          avatarUrl: sceneImage, // Use scene image to prevent black screen
-          backgroundUrl: sceneImage, // Use scene image
+          avatarUrl: sceneImage, 
+          backgroundUrl: sceneImage, 
           systemInstruction: 'You are the narrator.',
           themeColor: 'gray-500',
           colorAccent: '#6b7280',
-          firstMessage: startNode.prompt, // Initial state
+          firstMessage: startNode.prompt, 
           voiceName: 'Kore'
       };
 
-      // Reset session to avoid pollution
       geminiService.resetSession(narrator.id);
 
       setGameState(prev => ({
           ...prev,
           selectedCharacterId: narrator.id,
-          tempStoryCharacter: narrator, // Store transient character
+          tempStoryCharacter: narrator, 
           selectedScenarioId: scenario.id,
           currentScenarioState: { scenarioId: scenario.id, currentNodeId: scenario.startNodeId },
-          // Reset history for this scenario run
           history: { ...prev.history, [narrator.id]: [] }, 
           currentScreen: 'chat'
       }));
@@ -475,7 +485,6 @@ const App: React.FC = () => {
   };
 
   const handleExploreWithEntry = (entry: JournalEntry) => {
-      // Set the active entry and navigate to HeartSphere
       setGameState(prev => ({
           ...prev,
           activeJournalEntryId: entry.id,
@@ -527,7 +536,6 @@ const App: React.FC = () => {
      });
   };
 
-  // Helper to open memory modal
   const openMemoryModal = (e: React.MouseEvent, scene: WorldScene) => {
       e.stopPropagation();
       setMemoryScene(scene);
@@ -538,9 +546,6 @@ const App: React.FC = () => {
   if (!isLoaded) return <div className="h-screen w-screen bg-black flex items-center justify-center text-white">Loading HeartSphere Core...</div>;
 
   const currentScene = [...WORLD_SCENES, ...gameState.customScenes].find(s => s.id === gameState.selectedSceneId);
-  
-  // Logic to determine the active character. 
-  // If we are in story mode (tempStoryCharacter exists), use that. Otherwise find in scene.
   const currentCharacter = gameState.tempStoryCharacter || currentScene?.characters.find(c => c.id === gameState.selectedCharacterId);
 
   const editingScenario = gameState.editingScenarioId 
@@ -706,7 +711,7 @@ const App: React.FC = () => {
                  )}
              </div>
 
-             {/* Custom Storylines Section - MOVED TO TOP */}
+             {/* Custom Storylines Section */}
              <div className="mb-8 pb-8 border-b border-gray-800">
                 <div className="flex justify-between items-center mb-4">
                      <h3 className="text-xl font-bold text-gray-400">剧本 / 故事线</h3>
