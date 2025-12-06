@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality, Type } from "@google/genai";
 import { Message, Character, StoryNode, CustomScenario, UserProfile, WorldScene, JournalEcho, JournalEntry } from "../types";
 import { createScenarioContext } from "../constants";
@@ -26,16 +25,20 @@ export class GeminiService {
       return await fn();
     } catch (error: any) {
       // Check for 429 status or "RESOURCE_EXHAUSTED" or "quota" in message
+      // Enhanced to check nested error object structure { error: { code, message, status } }
       const isRateLimit = 
         error?.status === 429 || 
         error?.code === 429 || 
+        error?.error?.code === 429 ||
+        error?.error?.status === 'RESOURCE_EXHAUSTED' ||
         error?.message?.includes('429') || 
         error?.message?.includes('RESOURCE_EXHAUSTED') ||
         error?.message?.includes('quota') ||
+        error?.status === 503 || 
         error?.status === 500; // Also retry on generic server errors
 
       if (isRateLimit && retries > 0) {
-        console.warn(`Gemini API Error. Retrying in ${delay}ms... (${retries} retries left)`);
+        console.warn(`Gemini API Error (Quota/Rate Limit). Retrying in ${delay}ms... (${retries} retries left)`, error);
         await new Promise(resolve => setTimeout(resolve, delay));
         return this.retry(fn, retries - 1, delay * 2); // Exponential backoff
       }
@@ -64,6 +67,11 @@ export class GeminiService {
       this.chatSessions.set(character.id, chat);
     }
     return this.chatSessions.get(character.id)!;
+  }
+  
+  // Public method to reset a session (e.g. for scenario restart)
+  resetSession(characterId: string) {
+    this.chatSessions.delete(characterId);
   }
 
   // Send message and get stream
@@ -155,7 +163,7 @@ export class GeminiService {
         console.error("Full character generation from prompt failed", e);
         throw e;
       }
-    });
+    }, 5, 3000); // Increase retries for character generation
   }
 
 
@@ -219,6 +227,7 @@ export class GeminiService {
 
   // AI Magic Build: Generate a full scenario structure from a prompt
   async generateScenarioFromPrompt(userPrompt: string): Promise<CustomScenario | null> {
+    // Increase retries for magic build as it is a heavy operation
     return this.retry(async () => {
       try {
         const response = await this.ai.models.generateContent({
@@ -295,7 +304,7 @@ export class GeminiService {
         console.error("Magic build attempt failed", e);
         throw e;
       }
-    });
+    }, 5, 3000); // 5 retries, starting at 3s delay
   }
 
   // Generate an image of the character
@@ -330,6 +339,51 @@ export class GeminiService {
       } catch (e) {
           console.warn("Generic image generation failed, will retry:", e);
           throw e; 
+      }
+    });
+  }
+  
+  // Analyzes an image to generate a World/Era name and description
+  async analyzeImageForEra(imageUrl: string): Promise<{ name: string; description: string } | null> {
+    return this.retry(async () => {
+      try {
+        // Extract base64 data if it's a data URL
+        const base64Data = imageUrl.split(',')[1]; 
+        if (!base64Data) return null;
+
+        const prompt = `Analyze this image. It is a cover image for a "World Era" or "Memory" in a game.
+        Create a creative Title (name) and a poetic, atmospheric Description (description) for it.
+        Language: Chinese (Simplified).
+        Output JSON: { "name": "...", "description": "..." }`;
+
+        const response = await this.ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: {
+            parts: [
+              { inlineData: { mimeType: 'image/jpeg', data: base64Data } }, // Assuming jpeg/png, API handles it
+              { text: prompt }
+            ]
+          },
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+               type: Type.OBJECT,
+               properties: {
+                 name: { type: Type.STRING },
+                 description: { type: Type.STRING }
+               },
+               required: ["name", "description"]
+            }
+          }
+        });
+
+        if (response.text) {
+           return JSON.parse(response.text);
+        }
+        return null;
+      } catch (e) {
+        console.error("Image analysis failed", e);
+        return null;
       }
     });
   }
@@ -520,18 +574,18 @@ export class GeminiService {
           config: {
             responseMimeType: "application/json",
             responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    subject: { type: Type.STRING },
-                    content: { type: Type.STRING }
-                },
-                required: ["subject", "content"]
+              type: Type.OBJECT,
+              properties: {
+                subject: { type: Type.STRING },
+                content: { type: Type.STRING }
+              },
+              required: ["subject", "content"]
             }
           }
         });
 
         if (response.text) {
-             return JSON.parse(response.text);
+          return JSON.parse(response.text);
         }
         return null;
       } catch (e) {
@@ -539,68 +593,6 @@ export class GeminiService {
         return null;
       }
     });
-  }
-
-  // --- Era Analysis: Analyze image for era context ---
-  async analyzeImageForEra(base64Image: string): Promise<{ name: string; description: string } | null> {
-    return this.retry(async () => {
-      try {
-        const prompt = `
-          You are analyzing a user-uploaded image to create a "World Era" in a metaverse application.
-          This image might be:
-          1. A historical photo (e.g., 90s street, old event).
-          2. A personal memory (e.g., a specific room, a landscape).
-          3. A fictional artwork.
-
-          TASK:
-          Identify the probable era, year, atmosphere, or key event in the image.
-          Generate a concise, poetic title and description for this "Era".
-          
-          OUTPUT JSON:
-          {
-            "name": "Suggest a name (e.g. '1998世界杯之夏', '千禧年的老街', '赛博废墟')",
-            "description": "A 1-2 sentence description of the vibe, suitable for a world setting. (Chinese)"
-          }
-        `;
-        
-        // Strip the data:image/png;base64, prefix if present
-        const cleanBase64 = base64Image.split(',')[1];
-
-        const response = await this.ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: {
-            parts: [
-               { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
-               { text: prompt }
-            ]
-          },
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    name: { type: Type.STRING },
-                    description: { type: Type.STRING }
-                },
-                required: ["name", "description"]
-            }
-          }
-        });
-
-        if (response.text) {
-            return JSON.parse(response.text);
-        }
-        return null;
-      } catch (e) {
-        console.error("Era image analysis failed", e);
-        return null;
-      }
-    });
-  }
-
-  // Reset a session (e.g. if user restarts)
-  resetSession(characterId: string) {
-    this.chatSessions.delete(characterId);
   }
 }
 
