@@ -1,4 +1,6 @@
 
+
+
 import React, { useState } from 'react';
 import { JournalEntry } from '../types';
 import { Button } from './Button';
@@ -12,9 +14,10 @@ interface RealWorldScreenProps {
   onExplore: (entry: JournalEntry) => void;
   onChatWithCharacter: (characterName: string) => void; // New prop
   onBack: () => void;
+  autoGenerateImage: boolean; // New prop to control auto generation
 }
 
-export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAddEntry, onUpdateEntry, onDeleteEntry, onExplore, onChatWithCharacter, onBack }) => {
+export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAddEntry, onUpdateEntry, onDeleteEntry, onExplore, onChatWithCharacter, onBack, autoGenerateImage }) => {
   const [isCreating, setIsCreating] = useState(false); // Controls visibility of the form
   const [isEditing, setIsEditing] = useState(false); // Controls whether we are editing an existing entry
   
@@ -93,22 +96,24 @@ export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAdd
           setIsEditing(false);
       } else {
           // Create new
-          setIsGeneratingImage(true);
-          
           let generatedImageUrl = undefined;
-          try {
-            // Mind Projection: Generate Image
-            const img = await geminiService.generateMoodImage(newContent);
-            if (img) generatedImageUrl = img;
-          } catch (e) {
-            console.error("Failed to generate mind projection", e);
+          
+          if (autoGenerateImage) {
+              setIsGeneratingImage(true);
+              try {
+                // Mind Projection: Generate Image
+                const img = await geminiService.generateMoodImage(newContent);
+                if (img) generatedImageUrl = img;
+              } catch (e) {
+                console.error("Failed to generate mind projection", e);
+              }
+              setIsGeneratingImage(false);
           }
 
           onAddEntry(newTitle.trim(), newContent.trim(), generatedImageUrl, mirrorInsight || undefined);
           setNewTitle('');
           setNewContent('');
           setMirrorInsight(null);
-          setIsGeneratingImage(false);
           setIsCreating(false);
       }
     }
@@ -126,7 +131,11 @@ export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAdd
       
       <div className="flex justify-between items-center">
          <h2 className="text-xl font-bold text-white">{isEditing ? '编辑日记' : '写下此刻'}</h2>
-         {!isEditing && <span className="text-xs text-pink-400 border border-pink-500/30 bg-pink-500/10 px-2 py-1 rounded">Mind Projection 在线</span>}
+         {!isEditing && (
+             <span className={`text-xs px-2 py-1 rounded border ${autoGenerateImage ? 'text-pink-400 border-pink-500/30 bg-pink-500/10' : 'text-gray-500 border-gray-600 bg-gray-800'}`}>
+                 {autoGenerateImage ? 'Mind Projection 开启' : '配图生成已关闭'}
+             </span>
+         )}
       </div>
 
       <input
@@ -178,7 +187,7 @@ export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAdd
       <div className="flex justify-end gap-4 mt-auto">
         <Button variant="ghost" onClick={() => { setIsCreating(false); setIsEditing(false); }} disabled={isGeneratingImage}>取消</Button>
         <Button onClick={handleSaveEntry} disabled={!newTitle.trim() || !newContent.trim() || isGeneratingImage} className="bg-gradient-to-r from-pink-500 to-purple-600">
-            {isEditing ? '保存修改' : '保存并生成投影'}
+            {isEditing ? '保存修改' : (autoGenerateImage ? '保存并生成投影' : '仅保存文字')}
         </Button>
       </div>
     </div>

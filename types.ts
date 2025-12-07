@@ -1,4 +1,5 @@
 
+
 // This file includes legacy types like 'Persona' to prevent errors in unused components,
 // but the main application logic relies on the 'WorldScene' architecture.
 export interface Persona {
@@ -23,6 +24,15 @@ export interface Character {
   colorAccent: string;
   firstMessage: string;
   voiceName: string;
+
+  // --- New Deep Personality Fields ---
+  mbti?: string;             // e.g., "INFJ"
+  tags?: string[];           // e.g., ["Tsundere", "Hacker", "Cat Lover"]
+  speechStyle?: string;      // e.g., "Short, coded, uses slang"
+  catchphrases?: string[];   // e.g., "Interesting.", "Baka!"
+  secrets?: string;          // Hidden depth not known to user initially
+  motivations?: string;      // Current goal driving the character
+  relationships?: string;    // Text description of connections with others
 }
 
 export interface Message {
@@ -79,16 +89,25 @@ export type AIProvider = 'gemini' | 'openai' | 'qwen' | 'doubao';
 export interface ModelConfig {
   apiKey: string;
   baseUrl?: string; // Optional for custom endpoints
-  modelName: string;
+  modelName: string;      // Text Model
+  imageModel?: string;    // Image Generation Model
+  videoModel?: string;    // Video Generation Model
 }
 
 export interface AppSettings {
   autoGenerateAvatars: boolean;
   autoGenerateStoryScenes: boolean;
-  debugMode: boolean; // New Debug Toggle
+  autoGenerateJournalImages: boolean; // New setting for journal
+  debugMode: boolean; 
   
-  // AI Model Configuration
-  activeProvider: AIProvider;
+  // Modality Routing Settings
+  textProvider: AIProvider;
+  imageProvider: AIProvider;
+  videoProvider: AIProvider; // New Video Support
+  audioProvider: AIProvider;
+  enableFallback: boolean; // If true, try other providers on error
+
+  // Provider Configurations
   geminiConfig: ModelConfig;
   openaiConfig: ModelConfig;
   qwenConfig: ModelConfig;
@@ -141,7 +160,7 @@ export interface DebugLog {
 }
 
 export interface GameState {
-  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder';
+  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder' | 'connectionSpace';
   userProfile: UserProfile | null;
   selectedSceneId: string | null;
   selectedCharacterId: string | null;
@@ -154,6 +173,10 @@ export interface GameState {
   history: Record<string, Message[]>; 
   customAvatars: Record<string, string>; 
   generatingAvatarId: string | null; 
+  
+  // Custom characters added to scenes (Map: sceneId -> Character[])
+  customCharacters: Record<string, Character[]>;
+
   customScenarios: CustomScenario[];
   customScenes: WorldScene[];
   journalEntries: JournalEntry[];

@@ -52,11 +52,12 @@ export const storageService = {
         customAvatars: state.customAvatars,
         customScenarios: state.customScenarios,
         customScenes: state.customScenes,
+        customCharacters: state.customCharacters, // Ensure user-created characters for default scenes are saved
         journalEntries: state.journalEntries,
         settings: state.settings,
         mailbox: state.mailbox,
         lastLoginTime: state.lastLoginTime,
-        sceneMemories: state.sceneMemories || {}, // Ensure this is saved
+        sceneMemories: state.sceneMemories || {}, 
       };
 
       const db = await storageService.initDB();
@@ -145,6 +146,7 @@ export const storageService = {
         customAvatars: currentState.customAvatars,
         customScenarios: currentState.customScenarios,
         customScenes: currentState.customScenes,
+        customCharacters: currentState.customCharacters,
         journalEntries: currentState.journalEntries,
         settings: currentState.settings,
         mailbox: currentState.mailbox,

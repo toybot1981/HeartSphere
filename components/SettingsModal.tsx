@@ -1,4 +1,6 @@
 
+
+
 import React, { useRef, useState } from 'react';
 import { AppSettings, GameState, AIProvider } from '../types';
 import { Button } from './Button';
@@ -23,6 +25,27 @@ const Toggle: React.FC<{ label: string; description: string; enabled: boolean; o
   </div>
 );
 
+const ConfigInput: React.FC<{ label: string; value: string; onChange: (val: string) => void; placeholder: string; type?: string }> = ({ label, value, onChange, placeholder, type = 'text' }) => (
+    <div className="flex flex-col gap-1">
+        <label className="text-[10px] uppercase font-bold tracking-wider text-gray-500">{label}</label>
+        <input 
+            type={type}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-xs text-white focus:border-pink-500 outline-none transition-colors"
+        />
+    </div>
+);
+
+const ConfigSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+    <div className="mb-4 last:mb-0">
+        <h6 className="text-[10px] font-bold text-gray-400 border-b border-gray-700/50 pb-1 mb-2 uppercase tracking-widest">{title}</h6>
+        <div className="space-y-3">
+            {children}
+        </div>
+    </div>
+);
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +121,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
       });
   };
 
+  const PROVIDERS: {id: AIProvider, name: string}[] = [
+      { id: 'gemini', name: 'Gemini (Google)' },
+      { id: 'openai', name: 'ChatGPT (OpenAI)' },
+      { id: 'qwen', name: '通义千问 (Qwen)' },
+      { id: 'doubao', name: '豆包 (Volcengine)' }
+  ];
+
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
       <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto flex flex-col">
@@ -120,7 +150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                 onClick={() => setActiveTab('models')}
                 className={`flex-1 pb-3 text-sm font-bold transition-colors ${activeTab === 'models' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500 hover:text-white'}`}
             >
-                AI 模型
+                AI 模型配置
             </button>
             <button 
                 onClick={() => setActiveTab('backup')}
@@ -147,6 +177,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                         onChange={(enabled) => onSettingsChange({ ...settings, autoGenerateStoryScenes: enabled })}
                     />
                     <Toggle 
+                        label="自动生成日记配图"
+                        description="开启后，保存日记时会自动分析情绪并生成抽象配图。关闭可节省Token。"
+                        enabled={settings.autoGenerateJournalImages}
+                        onChange={(enabled) => onSettingsChange({ ...settings, autoGenerateJournalImages: enabled })}
+                    />
+                    <Toggle 
                         label="开发者调试模式"
                         description="在屏幕底部显示实时 AI 请求/响应日志。"
                         enabled={settings.debugMode}
@@ -157,214 +193,283 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
 
             {/* MODELS TAB */}
             {activeTab === 'models' && (
-                <div className="space-y-6">
-                    {/* Provider Selection */}
-                    <div>
-                        <label className="block text-sm font-bold text-gray-400 mb-2">当前 AI 提供商</label>
-                        <div className="grid grid-cols-4 gap-2">
-                             {(['gemini', 'openai', 'qwen', 'doubao'] as AIProvider[]).map(provider => (
-                                 <button
-                                    key={provider}
-                                    onClick={() => onSettingsChange({ ...settings, activeProvider: provider })}
-                                    className={`py-2 rounded-lg text-xs md:text-sm font-bold border transition-all ${
-                                        settings.activeProvider === provider 
-                                        ? 'bg-pink-600 border-pink-400 text-white' 
-                                        : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-gray-500'
-                                    }`}
-                                 >
-                                     {provider === 'gemini' ? 'Gemini' : provider === 'openai' ? 'ChatGPT' : provider === 'qwen' ? '通义千问' : '豆包'}
-                                 </button>
-                             ))}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-2">
-                            * 注意：部分功能（如图片生成、语音）目前仅在 Gemini 下提供最佳支持。其他模型将仅用于文本对话。
-                        </p>
-                    </div>
-
-                    {/* Gemini Config */}
-                    {settings.activeProvider === 'gemini' && (
-                        <div className="space-y-3 bg-gray-900/50 p-4 rounded-xl border border-gray-700 animate-fade-in">
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">API Key (Google AI Studio)</label>
-                                <input 
-                                    type="password" 
-                                    value={settings.geminiConfig.apiKey}
-                                    onChange={(e) => updateProviderConfig('gemini', 'apiKey', e.target.value)}
-                                    placeholder="默认使用环境变量，在此覆盖..."
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                <div className="space-y-8">
+                    
+                    {/* 1. API KEY CONFIGURATION */}
+                    <div className="space-y-6">
+                        <h4 className="text-sm font-bold text-gray-300 border-b border-gray-700 pb-2">API 密钥 & 模型参数</h4>
+                        
+                        {/* Gemini Config */}
+                        <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                             <h5 className="text-sm font-bold text-pink-400 mb-4 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-pink-400"></span>
+                                Gemini (Google)
+                             </h5>
+                             <ConfigSection title="Authentication">
+                                <ConfigInput 
+                                    label="API Key" 
+                                    value={settings.geminiConfig.apiKey} 
+                                    onChange={(v) => updateProviderConfig('gemini', 'apiKey', v)} 
+                                    placeholder="sk-..." type="password" 
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">Model Name</label>
-                                <input 
-                                    type="text" 
-                                    value={settings.geminiConfig.modelName}
-                                    onChange={(e) => updateProviderConfig('gemini', 'modelName', e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                             </ConfigSection>
+                             <ConfigSection title="Text Generation">
+                                <ConfigInput 
+                                    label="Text Model Name" 
+                                    value={settings.geminiConfig.modelName} 
+                                    onChange={(v) => updateProviderConfig('gemini', 'modelName', v)} 
+                                    placeholder="gemini-2.5-flash" 
                                 />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* OpenAI Config */}
-                    {settings.activeProvider === 'openai' && (
-                        <div className="space-y-3 bg-gray-900/50 p-4 rounded-xl border border-gray-700 animate-fade-in">
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">API Key</label>
-                                <input 
-                                    type="password" 
-                                    value={settings.openaiConfig.apiKey}
-                                    onChange={(e) => updateProviderConfig('openai', 'apiKey', e.target.value)}
-                                    placeholder="sk-..."
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">Base URL (Optional)</label>
-                                <input 
-                                    type="text" 
-                                    value={settings.openaiConfig.baseUrl}
-                                    onChange={(e) => updateProviderConfig('openai', 'baseUrl', e.target.value)}
-                                    placeholder="https://api.openai.com/v1"
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">Model Name</label>
-                                <input 
-                                    type="text" 
-                                    value={settings.openaiConfig.modelName}
-                                    onChange={(e) => updateProviderConfig('openai', 'modelName', e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Qwen Config */}
-                    {settings.activeProvider === 'qwen' && (
-                        <div className="space-y-3 bg-gray-900/50 p-4 rounded-xl border border-gray-700 animate-fade-in">
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">API Key (DashScope)</label>
-                                <input 
-                                    type="password" 
-                                    value={settings.qwenConfig.apiKey}
-                                    onChange={(e) => updateProviderConfig('qwen', 'apiKey', e.target.value)}
-                                    placeholder="sk-..."
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">Base URL (OpenAI Compatible)</label>
-                                <input 
-                                    type="text" 
-                                    value={settings.qwenConfig.baseUrl}
-                                    onChange={(e) => updateProviderConfig('qwen', 'baseUrl', e.target.value)}
-                                    placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
-                                />
-                            </div>
-                             <div>
-                                <label className="block text-xs text-gray-500 mb-1">Model Name</label>
-                                <input 
-                                    type="text" 
-                                    value={settings.qwenConfig.modelName}
-                                    onChange={(e) => updateProviderConfig('qwen', 'modelName', e.target.value)}
-                                    placeholder="qwen-plus, qwen-max..."
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Doubao Config */}
-                    {settings.activeProvider === 'doubao' && (
-                        <div className="space-y-3 bg-gray-900/50 p-4 rounded-xl border border-gray-700 animate-fade-in">
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <label className="block text-xs text-gray-500">API Key (Volcengine)</label>
-                                    <a 
-                                        href="https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey" 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="text-pink-400 hover:text-pink-300 text-xs flex items-center gap-1"
-                                        title="前往火山引擎控制台获取"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
-                                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
-                                        </svg>
-                                        获取 Key
-                                    </a>
+                             </ConfigSection>
+                             <ConfigSection title="Visual Generation">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <ConfigInput 
+                                        label="Image Model" 
+                                        value={settings.geminiConfig.imageModel || ''} 
+                                        onChange={(v) => updateProviderConfig('gemini', 'imageModel', v)} 
+                                        placeholder="gemini-2.5-flash-image" 
+                                    />
+                                    <ConfigInput 
+                                        label="Video Model" 
+                                        value={settings.geminiConfig.videoModel || ''} 
+                                        onChange={(v) => updateProviderConfig('gemini', 'videoModel', v)} 
+                                        placeholder="veo-3.1-fast-generate-preview" 
+                                    />
                                 </div>
-                                <input 
-                                    type="password" 
-                                    value={settings.doubaoConfig?.apiKey}
-                                    onChange={(e) => updateProviderConfig('doubao', 'apiKey', e.target.value)}
-                                    placeholder="sk-..."
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                             </ConfigSection>
+                        </div>
+
+                        {/* OpenAI Config */}
+                        <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                             <h5 className="text-sm font-bold text-green-400 mb-4 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                                ChatGPT (OpenAI)
+                             </h5>
+                             <ConfigSection title="Authentication">
+                                <ConfigInput 
+                                    label="API Key" 
+                                    value={settings.openaiConfig.apiKey} 
+                                    onChange={(v) => updateProviderConfig('openai', 'apiKey', v)} 
+                                    placeholder="sk-..." type="password" 
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-gray-500 mb-1">Base URL</label>
-                                <input 
-                                    type="text" 
-                                    value={settings.doubaoConfig?.baseUrl}
-                                    onChange={(e) => updateProviderConfig('doubao', 'baseUrl', e.target.value)}
-                                    placeholder="https://ark.cn-beijing.volces.com/api/v3"
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                                <ConfigInput 
+                                    label="Base URL (Optional)" 
+                                    value={settings.openaiConfig.baseUrl || ''} 
+                                    onChange={(v) => updateProviderConfig('openai', 'baseUrl', v)} 
+                                    placeholder="https://api.openai.com/v1" 
                                 />
-                            </div>
-                             <div>
-                                <label className="block text-xs text-gray-500 mb-1">Endpoint ID / Model Name</label>
-                                <input 
-                                    type="text" 
-                                    value={settings.doubaoConfig?.modelName}
-                                    onChange={(e) => updateProviderConfig('doubao', 'modelName', e.target.value)}
-                                    placeholder="ep-202406... (接入点 ID)"
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
+                             </ConfigSection>
+                             <ConfigSection title="Text Generation">
+                                <ConfigInput 
+                                    label="Text Model Name" 
+                                    value={settings.openaiConfig.modelName} 
+                                    onChange={(v) => updateProviderConfig('openai', 'modelName', v)} 
+                                    placeholder="gpt-4o" 
                                 />
-                                <p className="text-[10px] text-gray-600 mt-1">请在火山引擎控制台创建推理接入点，填入 Endpoint ID。</p>
+                             </ConfigSection>
+                        </div>
+
+                        {/* Qwen Config */}
+                        <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                             <h5 className="text-sm font-bold text-purple-400 mb-4 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                                通义千问 (Qwen)
+                             </h5>
+                             <ConfigSection title="Authentication">
+                                <ConfigInput 
+                                    label="DashScope API Key" 
+                                    value={settings.qwenConfig.apiKey} 
+                                    onChange={(v) => updateProviderConfig('qwen', 'apiKey', v)} 
+                                    placeholder="sk-..." type="password" 
+                                />
+                             </ConfigSection>
+                             <ConfigSection title="Text Generation">
+                                <ConfigInput 
+                                    label="Text Model Name" 
+                                    value={settings.qwenConfig.modelName} 
+                                    onChange={(v) => updateProviderConfig('qwen', 'modelName', v)} 
+                                    placeholder="qwen-max" 
+                                />
+                             </ConfigSection>
+                             <ConfigSection title="Visual Generation">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <ConfigInput 
+                                        label="Image Model" 
+                                        value={settings.qwenConfig.imageModel || ''} 
+                                        onChange={(v) => updateProviderConfig('qwen', 'imageModel', v)} 
+                                        placeholder="qwen-image-plus" 
+                                    />
+                                    <ConfigInput 
+                                        label="Video Model" 
+                                        value={settings.qwenConfig.videoModel || ''} 
+                                        onChange={(v) => updateProviderConfig('qwen', 'videoModel', v)} 
+                                        placeholder="wanx-video" 
+                                    />
+                                </div>
+                             </ConfigSection>
+                        </div>
+
+                         {/* Doubao Config */}
+                        <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                             <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                                 <h5 className="text-sm font-bold text-blue-400 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                                    豆包 (Doubao)
+                                 </h5>
+                                 <a href="https://console.volcengine.com/ark/region:ark+cn-beijing/endpoint" target="_blank" rel="noopener noreferrer" className="text-[10px] text-gray-500 hover:text-blue-300 flex items-center gap-1">
+                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                                       <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                                     </svg>
+                                     Get API Key
+                                 </a>
+                             </div>
+                             <ConfigSection title="Authentication">
+                                <ConfigInput 
+                                    label="API Key" 
+                                    value={settings.doubaoConfig.apiKey} 
+                                    onChange={(v) => updateProviderConfig('doubao', 'apiKey', v)} 
+                                    placeholder="xxxxxxxx-xxxx-..." type="password" 
+                                />
+                                <ConfigInput 
+                                    label="Base URL" 
+                                    value={settings.doubaoConfig.baseUrl || ''} 
+                                    onChange={(v) => updateProviderConfig('doubao', 'baseUrl', v)} 
+                                    placeholder="https://ark.cn-beijing.volces.com/api/v3" 
+                                />
+                             </ConfigSection>
+                             <ConfigSection title="Text Generation">
+                                <ConfigInput 
+                                    label="Text Model (Endpoint ID)" 
+                                    value={settings.doubaoConfig.modelName} 
+                                    onChange={(v) => updateProviderConfig('doubao', 'modelName', v)} 
+                                    placeholder="ep-2024..." 
+                                />
+                             </ConfigSection>
+                             <ConfigSection title="Visual Generation">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <ConfigInput 
+                                        label="Image Model" 
+                                        value={settings.doubaoConfig.imageModel || ''} 
+                                        onChange={(v) => updateProviderConfig('doubao', 'imageModel', v)} 
+                                        placeholder="doubao-image-v1" 
+                                    />
+                                    <ConfigInput 
+                                        label="Video Model" 
+                                        value={settings.doubaoConfig.videoModel || ''} 
+                                        onChange={(v) => updateProviderConfig('doubao', 'videoModel', v)} 
+                                        placeholder="doubao-video-v1" 
+                                    />
+                                </div>
+                             </ConfigSection>
+                        </div>
+                    </div>
+                    
+                    {/* 2. ROUTING STRATEGY & FALLBACK */}
+                    <div className="bg-gray-800/80 p-5 rounded-xl border border-indigo-500/30 shadow-lg">
+                        <h4 className="text-sm font-bold text-indigo-300 mb-4 uppercase tracking-widest border-b border-indigo-500/20 pb-2">
+                           策略路由与容灾 (Strategy & Backup)
+                        </h4>
+                        
+                        <div className="space-y-4 mb-6">
+                            <p className="text-xs text-gray-400">选择不同任务类型的首选模型提供商。</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Text Chat (对话)</label>
+                                    <select 
+                                        value={settings.textProvider} 
+                                        onChange={(e) => onSettingsChange({...settings, textProvider: e.target.value as AIProvider})}
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-xs text-white focus:border-indigo-500 outline-none"
+                                    >
+                                        {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Image Gen (绘图)</label>
+                                    <select 
+                                        value={settings.imageProvider} 
+                                        onChange={(e) => onSettingsChange({...settings, imageProvider: e.target.value as AIProvider})}
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-xs text-white focus:border-indigo-500 outline-none"
+                                    >
+                                        {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Video Gen (视频)</label>
+                                    <select 
+                                        value={settings.videoProvider} 
+                                        onChange={(e) => onSettingsChange({...settings, videoProvider: e.target.value as AIProvider})}
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-xs text-white focus:border-indigo-500 outline-none"
+                                    >
+                                        {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Speech/TTS (语音)</label>
+                                    <select 
+                                        value={settings.audioProvider} 
+                                        onChange={(e) => onSettingsChange({...settings, audioProvider: e.target.value as AIProvider})}
+                                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-2 text-xs text-white focus:border-indigo-500 outline-none"
+                                    >
+                                        {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
                             </div>
                         </div>
-                    )}
+
+                        <Toggle 
+                            label="自动降级 (Auto Fallback)" 
+                            description="如果首选模型调用失败（如配额耗尽），自动尝试其他已配置的提供商。"
+                            enabled={settings.enableFallback}
+                            onChange={(enabled) => onSettingsChange({ ...settings, enableFallback: enabled })}
+                        />
+                    </div>
                 </div>
             )}
 
             {/* BACKUP TAB */}
             {activeTab === 'backup' && (
-                <div className="space-y-4">
-                    <p className="text-sm text-gray-400">将您的角色、剧本和日记数据导出到本地，或从之前的备份中恢复。</p>
-                    <div className="grid grid-cols-2 gap-4">
-                        <Button variant="secondary" onClick={handleExportBackup} className="border-green-500/30 text-green-300 hover:bg-green-500/10">
-                            <span className="flex items-center justify-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                导出备份
-                            </span>
+                <div className="space-y-6 text-center py-8">
+                    <div className="p-6 bg-gray-900/50 rounded-2xl border border-gray-700">
+                        <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-2xl">💾</span>
+                        </div>
+                        <h4 className="text-lg font-bold text-white mb-2">导出记忆核心</h4>
+                        <p className="text-sm text-gray-400 mb-6">将您的所有角色、日记和进度保存为本地文件。</p>
+                        <Button onClick={handleExportBackup} fullWidth className="bg-gradient-to-r from-pink-600 to-purple-600">
+                            下载备份文件 (.json)
                         </Button>
-                        <Button variant="secondary" onClick={handleImportClick} className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10">
-                            <span className="flex items-center justify-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                                读取备份
-                            </span>
-                        </Button>
-                        {/* Hidden File Input */}
+                    </div>
+
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                            <div className="w-full border-t border-gray-700"></div>
+                        </div>
+                        <div className="relative flex justify-center">
+                            <span className="bg-gray-800 px-2 text-xs text-gray-500 uppercase">OR</span>
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-gray-900/50 rounded-2xl border border-gray-700">
+                        <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-2xl">♻️</span>
+                        </div>
+                        <h4 className="text-lg font-bold text-white mb-2">恢复记忆核心</h4>
+                        <p className="text-sm text-gray-400 mb-6">从备份文件恢复数据。警告：这将覆盖当前进度。</p>
                         <input 
                             type="file" 
                             ref={fileInputRef} 
                             onChange={handleFileChange} 
-                            accept="application/json" 
+                            accept=".json" 
                             className="hidden" 
                         />
+                        <Button onClick={handleImportClick} variant="secondary" fullWidth className="border-gray-600">
+                            选择备份文件...
+                        </Button>
                     </div>
-                    {backupMsg && <p className="text-center text-xs text-green-400 animate-fade-in">{backupMsg}</p>}
+                    
+                    {backupMsg && <p className="text-green-400 text-sm font-bold animate-pulse">{backupMsg}</p>}
                 </div>
             )}
-        </div>
-
-        <div className="mt-8 text-center pt-4 border-t border-gray-700 shrink-0">
-            <Button onClick={onClose} className="bg-indigo-600 hover:bg-indigo-500 w-full">
-                关闭
-            </Button>
         </div>
       </div>
     </div>

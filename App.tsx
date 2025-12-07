@@ -1,6 +1,9 @@
 
+
+
+
 import React, { useState, useEffect, useRef } from 'react';
-import { WORLD_SCENES } from './constants';
+import { WORLD_SCENES, APP_TITLE } from './constants';
 import { ChatWindow } from './components/ChatWindow';
 import { ScenarioBuilder } from './components/ScenarioBuilder';
 import { SettingsModal } from './components/SettingsModal';
@@ -17,6 +20,7 @@ import { MailboxModal } from './components/MailboxModal';
 import { EraMemoryModal } from './components/EraMemoryModal';
 import { Button } from './components/Button';
 import { DebugConsole } from './components/DebugConsole';
+import { ConnectionSpace } from './components/ConnectionSpace';
 
 const App: React.FC = () => {
   
@@ -46,19 +50,39 @@ const App: React.FC = () => {
     history: {},
     customAvatars: {},
     generatingAvatarId: null,
+    customCharacters: {},
     customScenarios: [EXAMPLE_SCENARIO],
     customScenes: [],
     journalEntries: [],
     activeJournalEntryId: null,
     settings: { 
-      autoGenerateAvatars: false, 
-      autoGenerateStoryScenes: false,
+      autoGenerateAvatars: false, // Default false to save costs
+      autoGenerateStoryScenes: false, // Default false to save costs
+      autoGenerateJournalImages: false, // Default false to save costs
       debugMode: false,
-      activeProvider: 'gemini',
-      geminiConfig: { apiKey: '', modelName: 'gemini-2.5-flash' },
-      openaiConfig: { apiKey: '', baseUrl: 'https://api.openai.com/v1', modelName: 'gpt-4o' },
-      qwenConfig: { apiKey: '', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', modelName: 'qwen-plus' },
-      doubaoConfig: { apiKey: '', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', modelName: 'ep-20240604052345-xxxxx' } // Volcengine default base URL
+      // Default Routing
+      textProvider: 'gemini',
+      imageProvider: 'gemini',
+      videoProvider: 'gemini',
+      audioProvider: 'gemini',
+      enableFallback: true,
+      
+      geminiConfig: { apiKey: '', modelName: 'gemini-2.5-flash', imageModel: 'gemini-2.5-flash-image', videoModel: 'veo-3.1-fast-generate-preview' },
+      openaiConfig: { apiKey: '', baseUrl: 'https://api.openai.com/v1', modelName: 'gpt-4o', imageModel: 'dall-e-3' },
+      qwenConfig: { 
+        apiKey: 'sk-a486b81e29484fcea112b2c010b7bd95', 
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', 
+        modelName: 'qwen-max', 
+        imageModel: 'qwen-image-plus',
+        videoModel: 'wanx-video' 
+      },
+      doubaoConfig: { 
+        apiKey: '', 
+        baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', 
+        modelName: 'ep-20240604052345-xxxxx',
+        imageModel: 'doubao-image-v1', // Placeholder
+        videoModel: 'doubao-video-v1' // Placeholder
+      }
     },
     mailbox: [],
     lastLoginTime: Date.now(),
@@ -75,34 +99,38 @@ const App: React.FC = () => {
   const [showCharacterCreator, setShowCharacterCreator] = useState(false);
   const [showMailbox, setShowMailbox] = useState(false);
   
-  // Era Memory Modal State
   const [showEraMemory, setShowEraMemory] = useState(false);
   const [memoryScene, setMemoryScene] = useState<WorldScene | null>(null);
 
-  // Profile Setup Input State
   const [profileNickname, setProfileNickname] = useState('');
 
-  const attemptedGenerations = useRef<Set<string>>(new Set());
   const hasCheckedMail = useRef(false);
 
   // --- PERSISTENCE LOGIC ---
-
-  // 1. Load on mount (Async for IndexedDB)
   useEffect(() => {
     const init = async () => {
         const loadedState = await storageService.loadState();
         if (loadedState) {
           const savedSettings = (loadedState.settings || {}) as Partial<AppSettings>;
           
-          // Deep merge to ensure new providers exist in settings even if loading legacy state
           const mergedSettings: AppSettings = {
               ...DEFAULT_STATE.settings,
               ...savedSettings,
-              // Merge individual configs to preserve defaults for new fields if missing in saved
+              // Merge nested configs to ensure new keys exist
               geminiConfig: { ...DEFAULT_STATE.settings.geminiConfig, ...(savedSettings.geminiConfig || {}) },
               openaiConfig: { ...DEFAULT_STATE.settings.openaiConfig, ...(savedSettings.openaiConfig || {}) },
               qwenConfig: { ...DEFAULT_STATE.settings.qwenConfig, ...(savedSettings.qwenConfig || {}) },
               doubaoConfig: { ...DEFAULT_STATE.settings.doubaoConfig, ...(savedSettings.doubaoConfig || {}) },
+              // Ensure boolean flags are preserved if they exist, otherwise default (which is now false)
+              autoGenerateAvatars: savedSettings.autoGenerateAvatars ?? DEFAULT_STATE.settings.autoGenerateAvatars,
+              autoGenerateStoryScenes: savedSettings.autoGenerateStoryScenes ?? DEFAULT_STATE.settings.autoGenerateStoryScenes,
+              autoGenerateJournalImages: savedSettings.autoGenerateJournalImages ?? DEFAULT_STATE.settings.autoGenerateJournalImages,
+              
+              textProvider: savedSettings.textProvider || DEFAULT_STATE.settings.textProvider,
+              imageProvider: savedSettings.imageProvider || DEFAULT_STATE.settings.imageProvider,
+              videoProvider: savedSettings.videoProvider || DEFAULT_STATE.settings.videoProvider,
+              audioProvider: savedSettings.audioProvider || DEFAULT_STATE.settings.audioProvider,
+              enableFallback: savedSettings.enableFallback ?? DEFAULT_STATE.settings.enableFallback,
           };
 
           setGameState(prev => ({
@@ -112,18 +140,17 @@ const App: React.FC = () => {
             generatingAvatarId: null,
             activeJournalEntryId: null,
             editingScenarioId: null,
-            tempStoryCharacter: null, // Reset transient character
+            tempStoryCharacter: null, 
             mailbox: loadedState.mailbox || [],
             lastLoginTime: loadedState.lastLoginTime || Date.now(),
             sceneMemories: loadedState.sceneMemories || {},
-            debugLogs: [], // Always start clear on reload
+            customCharacters: loadedState.customCharacters || {},
+            debugLogs: [], 
             settings: mergedSettings
           }));
           
-          // Initialize Service with settings
           geminiService.updateConfig(mergedSettings);
         } else {
-          // Init default
           geminiService.updateConfig(DEFAULT_STATE.settings);
         }
         setIsLoaded(true);
@@ -131,15 +158,12 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // 2. Save on change (Debounced)
   useEffect(() => {
     if (!isLoaded) return; 
 
-    // Update service whenever settings change
     geminiService.updateConfig(gameState.settings);
 
     const timer = setTimeout(() => {
-      // Update lastLoginTime on every save to track activity
       const stateToSave = { ...gameState, lastLoginTime: Date.now() };
       storageService.saveState(stateToSave);
     }, 1000);
@@ -147,7 +171,6 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [gameState, isLoaded]);
 
-  // --- DEBUG LOGGING HOOK ---
   useEffect(() => {
       geminiService.setLogCallback((log: DebugLog) => {
           setGameState(prev => ({
@@ -157,37 +180,30 @@ const App: React.FC = () => {
       });
   }, []);
 
-
-  // --- CHRONOS MAILBOX CHECK ---
   useEffect(() => {
     if (!isLoaded || !gameState.userProfile || hasCheckedMail.current) return;
 
     const checkMail = async () => {
         hasCheckedMail.current = true;
-        // Check if offline for more than 1 minute (Test Mode). Real app would be hours.
         const now = Date.now();
         const offlineDuration = now - gameState.lastLoginTime;
-        const THRESHOLD = 60 * 1000; // 1 minute
+        const THRESHOLD = 60 * 1000; 
 
         if (offlineDuration > THRESHOLD) {
-            console.log("Offline for long enough, checking for mail...");
-            // Pick a sender: Random character from history or default scenes
-            // 1. Get recent chat character IDs
             const chattedCharIds = Object.keys(gameState.history);
             let candidate: Character | null = null;
             
             if (chattedCharIds.length > 0) {
-                 // Try to find a full character object for the ID
                  const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
                  for (const scene of allScenes) {
-                     const found = scene.characters.find(c => c.id === chattedCharIds[0]); // Just pick the first one for simplicity
+                     const sceneChars = [...scene.characters, ...(gameState.customCharacters[scene.id] || [])];
+                     const found = sceneChars.find(c => c.id === chattedCharIds[0]);
                      if (found) { candidate = found; break; }
                  }
             }
             
-            // Fallback if no history or character not found
             if (!candidate) {
-                candidate = WORLD_SCENES[0].characters[0]; // Sakura
+                candidate = WORLD_SCENES[0].characters[0]; 
             }
 
             if (candidate) {
@@ -220,7 +236,7 @@ const App: React.FC = () => {
 
   const handleProfileSubmit = () => {
     if(!profileNickname.trim()) return;
-    const profile = { nickname: profileNickname, avatarUrl: '' }; // Avatar generation can be added later
+    const profile = { nickname: profileNickname, avatarUrl: '' }; 
     setGameState(prev => ({
         ...prev,
         userProfile: profile,
@@ -241,12 +257,19 @@ const App: React.FC = () => {
   };
 
   const handleSceneSelect = (sceneId: string) => {
-    setGameState(prev => ({ ...prev, selectedSceneId: sceneId, currentScreen: 'characterSelection' }));
+    setGameState(prev => ({ 
+        ...prev, 
+        selectedSceneId: sceneId, 
+        // Important: Clear character/scenario selection when changing scene
+        selectedCharacterId: null,
+        tempStoryCharacter: null,
+        selectedScenarioId: null,
+        currentScreen: 'characterSelection' 
+    }));
   };
 
   const handleCharacterSelect = (character: Character) => {
     if (gameState.activeJournalEntryId) {
-        // We are carrying a question!
         const entry = gameState.journalEntries.find(e => e.id === gameState.activeJournalEntryId);
         if (entry) {
              const contextMsg: Message = {
@@ -255,7 +278,6 @@ const App: React.FC = () => {
                  text: `【系统提示：用户带着一个日记中的问题进入了心域】\n日记标题：${entry.title}\n日记内容：${entry.content}\n\n我的问题是：${entry.content} (请结合你的角色身份给我一些建议或安慰)`,
                  timestamp: Date.now()
              };
-             // Pre-inject this message into history if history is empty
              setGameState(prev => ({
                 ...prev,
                 history: {
@@ -263,7 +285,8 @@ const App: React.FC = () => {
                     [character.id]: [contextMsg]
                 },
                 selectedCharacterId: character.id,
-                tempStoryCharacter: null, // Clear story char
+                tempStoryCharacter: null,
+                selectedScenarioId: null, // Clear any scenario flags
                 currentScreen: 'chat'
              }));
              return;
@@ -273,21 +296,21 @@ const App: React.FC = () => {
     setGameState(prev => ({ 
         ...prev, 
         selectedCharacterId: character.id, 
-        tempStoryCharacter: null, // Clear story char
-        selectedScenarioId: null, // Ensure not in scenario mode
+        tempStoryCharacter: null, 
+        selectedScenarioId: null, // Explicitly clear Scenario ID
+        currentScenarioState: undefined,
         currentScreen: 'chat' 
     }));
   };
 
-  // Chat with character from Journal (Echoes)
   const handleChatWithCharacterByName = (characterName: string) => {
-    // Find the character and scene
     const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
     let foundChar: Character | null = null;
     let foundSceneId: string | null = null;
 
     for (const scene of allScenes) {
-        const char = scene.characters.find(c => c.name === characterName);
+        const sceneChars = [...scene.characters, ...(gameState.customCharacters[scene.id] || [])];
+        const char = sceneChars.find(c => c.name === characterName);
         if (char) {
             foundChar = char;
             foundSceneId = scene.id;
@@ -301,6 +324,7 @@ const App: React.FC = () => {
             selectedSceneId: foundSceneId,
             selectedCharacterId: foundChar!.id,
             tempStoryCharacter: null,
+            selectedScenarioId: null,
             currentScreen: 'chat'
         }));
     } else {
@@ -309,7 +333,6 @@ const App: React.FC = () => {
   };
 
   const handleChatBack = (echo?: JournalEcho) => {
-    // If we have a generated echo and an active journal entry, save it
     if (echo && gameState.activeJournalEntryId) {
         setGameState(prev => ({
             ...prev,
@@ -318,13 +341,18 @@ const App: React.FC = () => {
                 ? { ...entry, echo: echo } 
                 : entry
             ),
-            activeJournalEntryId: null // Clear active entry
+            activeJournalEntryId: null 
         }));
-        // Go back to Real World to see the echo
-        setGameState(prev => ({ ...prev, selectedCharacterId: null, tempStoryCharacter: null, currentScreen: 'realWorld' }));
+        setGameState(prev => ({ ...prev, selectedCharacterId: null, tempStoryCharacter: null, selectedScenarioId: null, currentScreen: 'realWorld' }));
     } else {
-        // Normal back
-        setGameState(prev => ({ ...prev, selectedCharacterId: null, tempStoryCharacter: null, currentScreen: 'characterSelection' }));
+        setGameState(prev => ({ 
+            ...prev, 
+            selectedCharacterId: null, 
+            tempStoryCharacter: null, 
+            selectedScenarioId: null, // Ensure scenario ID is cleared on back
+            currentScenarioState: undefined,
+            currentScreen: 'characterSelection' 
+        }));
     }
   };
 
@@ -354,7 +382,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Era Constructor Handlers
   const handleSaveEra = (newScene: WorldScene) => {
     setGameState(prev => {
         const exists = prev.customScenes.some(s => s.id === newScene.id);
@@ -380,31 +407,39 @@ const App: React.FC = () => {
       if(window.confirm("确定要删除这个时代吗？里面的所有角色和记忆都将消失。")) {
           setGameState(prev => ({
               ...prev,
-              customScenes: prev.customScenes.filter(s => s.id !== sceneId)
+              customScenes: prev.customScenes.filter(s => s.id !== sceneId),
+              // Also clean up custom characters for this scene
+              customCharacters: Object.fromEntries(
+                 Object.entries(prev.customCharacters).filter(([id]) => id !== sceneId)
+              )
           }));
       }
   };
 
-  // Character Constructor Handlers
   const handleSaveCharacter = (newCharacter: Character) => {
     if (!gameState.selectedSceneId) return;
-    setGameState(prev => ({
-        ...prev,
-        customScenes: prev.customScenes.map(scene => {
-            if (scene.id === prev.selectedSceneId) {
-                return { ...scene, characters: [...scene.characters, newCharacter] };
+    
+    // Updated Logic: Save to customCharacters map instead of mutating customScenes directly
+    // This allows adding characters to BOTH built-in scenes and custom scenes
+    setGameState(prev => {
+        const sceneId = prev.selectedSceneId!;
+        const existingCustomChars = prev.customCharacters[sceneId] || [];
+        
+        return {
+            ...prev,
+            customCharacters: {
+                ...prev.customCharacters,
+                [sceneId]: [...existingCustomChars, newCharacter]
             }
-            return scene;
-        })
-    }));
+        };
+    });
+    
     setShowCharacterCreator(false);
   };
 
-  // Scenario Builder Handlers
   const handleSaveScenario = (scenario: CustomScenario) => {
     if (!gameState.selectedSceneId) return;
     
-    // Ensure scenario belongs to current scene
     const completeScenario = { ...scenario, sceneId: gameState.selectedSceneId };
     
     setGameState(prev => {
@@ -418,20 +453,19 @@ const App: React.FC = () => {
         return {
             ...prev,
             customScenarios: newScenarios,
-            currentScreen: 'characterSelection', // Back to list
+            currentScreen: 'characterSelection', 
             editingScenarioId: null
         };
     });
   };
 
   const handleDeleteScenario = (scenarioId: string, e: React.MouseEvent) => {
-      e.stopPropagation(); // Prevent card click
+      e.stopPropagation(); 
       e.preventDefault();
       if (window.confirm("确定要删除这个剧本吗？")) {
           setGameState(prev => ({
               ...prev,
               customScenarios: prev.customScenarios.filter(s => s.id !== scenarioId),
-              // Clear editing state if deleting the active one
               editingScenarioId: prev.editingScenarioId === scenarioId ? null : prev.editingScenarioId,
               selectedScenarioId: prev.selectedScenarioId === scenarioId ? null : prev.selectedScenarioId
           }));
@@ -439,7 +473,7 @@ const App: React.FC = () => {
   };
 
   const handleEditScenario = (scenario: CustomScenario, e: React.MouseEvent) => {
-      e.stopPropagation(); // Prevent card click
+      e.stopPropagation();
       e.preventDefault();
       setGameState(prev => ({
           ...prev,
@@ -483,7 +517,6 @@ const App: React.FC = () => {
       }));
   };
 
-  // Journal Handlers
   const handleAddJournalEntry = (title: string, content: string, imageUrl?: string, insight?: string) => {
       const newEntry: JournalEntry = {
           id: `entry_${Date.now()}`,
@@ -521,7 +554,6 @@ const App: React.FC = () => {
       }));
   };
 
-  // Mailbox Handlers
   const handleMarkMailRead = (mailId: string) => {
       setGameState(prev => ({
           ...prev,
@@ -529,7 +561,6 @@ const App: React.FC = () => {
       }));
   };
 
-  // Era Memory Handlers
   const handleAddMemory = (content: string, imageUrl?: string) => {
     if (!memoryScene) return;
     const newMemory: EraMemory = {
@@ -575,7 +606,24 @@ const App: React.FC = () => {
   if (!isLoaded) return <div className="h-screen w-screen bg-black flex items-center justify-center text-white">Loading HeartSphere Core...</div>;
 
   const currentScene = [...WORLD_SCENES, ...gameState.customScenes].find(s => s.id === gameState.selectedSceneId);
-  const currentCharacter = gameState.tempStoryCharacter || currentScene?.characters.find(c => c.id === gameState.selectedCharacterId);
+  
+  // Combine built-in characters with custom characters for this scene
+  let sceneCharacters: Character[] = [];
+  if (currentScene) {
+      const customCharsForScene = gameState.customCharacters[currentScene.id] || [];
+      sceneCharacters = [...currentScene.characters, ...customCharsForScene];
+  }
+
+  // Aggregate all characters for Connection Space
+  const allCharacters = [...WORLD_SCENES, ...gameState.customScenes].reduce((acc, scene) => {
+      const sceneChars = [...scene.characters, ...(gameState.customCharacters[scene.id] || [])];
+      return [...acc, ...sceneChars];
+  }, [] as Character[]);
+
+  let currentCharacter = gameState.tempStoryCharacter || sceneCharacters.find(c => c.id === gameState.selectedCharacterId);
+  if (!currentCharacter && currentScene?.mainStory?.id === gameState.selectedCharacterId) {
+      currentCharacter = currentScene.mainStory;
+  }
 
   const editingScenario = gameState.editingScenarioId 
     ? gameState.customScenarios.find(s => s.id === gameState.editingScenarioId) 
@@ -587,11 +635,10 @@ const App: React.FC = () => {
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden font-sans text-white">
       
-      {/* 1. Profile Setup Screen */}
       {gameState.currentScreen === 'profileSetup' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 p-6">
            <div className="max-w-md w-full text-center space-y-8">
-               <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">Welcome to HeartSphere</h1>
+               <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">Welcome to {APP_TITLE}</h1>
                <p className="text-gray-400">首先，请告诉我们该如何称呼你。</p>
                <input 
                  type="text" 
@@ -605,7 +652,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* 2. Nexus Entry Point */}
       {gameState.currentScreen === 'entryPoint' && gameState.userProfile && (
           <EntryPoint 
             onNavigate={(screen) => setGameState(prev => ({ ...prev, currentScreen: screen }))} 
@@ -614,7 +660,6 @@ const App: React.FC = () => {
           />
       )}
 
-      {/* 3. Real World Journal Screen */}
       {gameState.currentScreen === 'realWorld' && (
           <RealWorldScreen 
              entries={gameState.journalEntries}
@@ -624,10 +669,38 @@ const App: React.FC = () => {
              onExplore={handleExploreWithEntry}
              onChatWithCharacter={handleChatWithCharacterByName}
              onBack={handleEnterNexus}
+             autoGenerateImage={gameState.settings.autoGenerateJournalImages}
           />
       )}
 
-      {/* 4. HeartSphere Scene Selection */}
+      {gameState.currentScreen === 'connectionSpace' && gameState.userProfile && (
+          <ConnectionSpace 
+             characters={allCharacters}
+             userProfile={gameState.userProfile}
+             onBack={() => setGameState(prev => ({ ...prev, currentScreen: 'sceneSelection' }))}
+             onConnect={(character) => {
+                 // Find which scene this character belongs to
+                 const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
+                 let sceneId: string | null = null;
+                 for (const s of allScenes) {
+                     const chars = [...s.characters, ...(gameState.customCharacters[s.id] || [])];
+                     if (chars.find(c => c.id === character.id)) {
+                         sceneId = s.id;
+                         break;
+                     }
+                 }
+                 if (sceneId) {
+                     setGameState(prev => ({
+                         ...prev,
+                         selectedSceneId: sceneId,
+                         selectedCharacterId: character.id,
+                         currentScreen: 'chat'
+                     }));
+                 }
+             }}
+          />
+      )}
+
       {gameState.currentScreen === 'sceneSelection' && (
         <div className="h-full flex flex-col p-8 bg-gradient-to-br from-gray-900 to-black">
            <div className="flex justify-between items-center mb-6">
@@ -636,13 +709,20 @@ const App: React.FC = () => {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                   </Button>
                   <div>
-                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">心域 HeartSphere</h2>
+                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">{APP_TITLE}</h2>
                     <p className="text-gray-400 text-sm">选择一个时代切片进行连接</p>
                   </div>
               </div>
               
               <div className="flex items-center gap-3">
-                  {/* Mailbox Button */}
+                  {/* Connection Space Button */}
+                  <button
+                    onClick={() => setGameState(prev => ({ ...prev, currentScreen: 'connectionSpace' }))}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-900 to-indigo-900 border border-blue-500/30 text-blue-200 hover:text-white hover:border-blue-400 transition-all shadow-lg hover:shadow-blue-500/20"
+                  >
+                      <span className="animate-pulse">✨</span> 心域连接
+                  </button>
+
                   <button 
                     onClick={() => setShowMailbox(true)}
                     className="relative p-3 bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-all"
@@ -652,14 +732,12 @@ const App: React.FC = () => {
                           <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-bounce" />
                       )}
                   </button>
-                  {/* Create Era Button */}
                   <Button onClick={() => { setEditingScene(null); setShowEraCreator(true); }} className="text-sm bg-pink-600 hover:bg-pink-500">
                      + 创造新时代
                   </Button>
               </div>
            </div>
 
-           {/* Active Question Banner */}
            {gameState.activeJournalEntryId && (
                <div className="mb-6 p-4 bg-indigo-900/40 border border-indigo-500/50 rounded-xl flex items-center justify-between">
                    <div className="flex items-center gap-3">
@@ -678,34 +756,31 @@ const App: React.FC = () => {
            )}
 
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-10 scrollbar-hide">
-              {/* Combine Standard and Custom Scenes for rendering */}
               {[...WORLD_SCENES, ...gameState.customScenes].map(scene => {
                  const isCustom = gameState.customScenes.some(s => s.id === scene.id);
                  return (
                     <div key={scene.id} className="relative group">
                         <SceneCard scene={scene} onSelect={() => handleSceneSelect(scene.id)} />
                         
-                        {/* Custom Era Actions (Edit/Delete) - Only for custom scenes */}
                         {isCustom && (
                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-30">
                                 <button 
                                 onClick={(e) => { e.stopPropagation(); setEditingScene(scene); setShowEraCreator(true); }}
-                                className="p-2 bg-black/60 rounded-full hover:bg-white/20 border border-white/20 text-white"
+                                className="relative p-2 bg-black/60 rounded-full hover:bg-white/20 border border-white/20 text-white z-40 pointer-events-auto"
                                 title="编辑时代"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 pointer-events-none"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>
                                 </button>
                                 <button 
                                 onClick={(e) => handleDeleteEra(scene.id, e)}
-                                className="p-2 bg-black/60 rounded-full hover:bg-red-500/50 border border-white/20 text-white"
+                                className="relative p-2 bg-black/60 rounded-full hover:bg-red-500/50 border border-white/20 text-white z-40 pointer-events-auto"
                                 title="删除时代"
                                 >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 pointer-events-none"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                                 </button>
                             </div>
                         )}
                         
-                        {/* Era Memories Button - For ALL scenes */}
                         <button
                             onClick={(e) => openMemoryModal(e, scene)}
                             className="absolute bottom-4 right-4 z-20 px-3 py-1 bg-black/40 backdrop-blur-md rounded-full border border-white/10 text-xs font-bold text-white hover:bg-pink-600 hover:border-pink-400 transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1"
@@ -719,7 +794,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* 5. Character Selection & Stories */}
       {gameState.currentScreen === 'characterSelection' && currentScene && (
          <div className="h-full flex flex-col p-8 bg-gray-900">
              <div className="flex justify-between items-center mb-6">
@@ -727,157 +801,157 @@ const App: React.FC = () => {
                      <Button variant="ghost" onClick={() => setGameState(prev => ({...prev, currentScreen: 'sceneSelection'}))} className="!p-2">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                      </Button>
-                     <div>
-                         <h2 className="text-3xl font-bold text-white">{currentScene.name}</h2>
-                         <p className="text-gray-400 text-sm">选择你的连接对象</p>
-                     </div>
+                     <h2 className="text-3xl font-bold text-white">{currentScene.name}</h2>
                  </div>
-                 {/* Show Create Character Button only for Custom Scenes */}
-                 {gameState.customScenes.some(s => s.id === currentScene.id) && (
-                     <Button onClick={() => setShowCharacterCreator(true)} className="bg-indigo-600 hover:bg-indigo-500">
-                         + 添加新角色
+                 <div className="flex gap-2">
+                     <Button onClick={() => setShowCharacterCreator(true)} className="text-sm">
+                        + 新增角色
                      </Button>
-                 )}
+                 </div>
              </div>
-
-             {/* Custom Storylines Section */}
-             <div className="mb-8 pb-8 border-b border-gray-800">
-                <div className="flex justify-between items-center mb-4">
-                     <h3 className="text-xl font-bold text-gray-400">剧本 / 故事线</h3>
-                     <Button onClick={() => setGameState(prev => ({ ...prev, currentScreen: 'builder', editingScenarioId: null }))} className="text-sm bg-purple-600 hover:bg-purple-500">
-                         + 创作新剧本
-                     </Button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {gameState.customScenarios.filter(s => s.sceneId === currentScene.id).map(scenario => (
-                        <div key={scenario.id} className="bg-gray-800 p-4 rounded-xl border border-gray-700 flex justify-between items-center">
-                            <div className="cursor-pointer flex-1" onClick={() => handlePlayScenario(scenario)}>
-                                <h4 className="font-bold text-white hover:text-purple-400 transition-colors">{scenario.title}</h4>
-                                <p className="text-xs text-gray-500 line-clamp-1">{scenario.description}</p>
-                            </div>
-                            <div className="flex gap-2 z-10">
-                                <button onClick={(e) => handleEditScenario(scenario, e)} className="text-gray-500 hover:text-white" title="编辑">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                </button>
-                                <button onClick={(e) => handleDeleteScenario(scenario.id, e)} className="text-gray-500 hover:text-red-400" title="删除">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
-                            </div>
+             
+             <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar">
+                {currentScene.mainStory && (
+                    <div className="mb-10 p-1 rounded-3xl bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500">
+                        <div className="bg-gray-900 rounded-[22px] overflow-hidden relative group">
+                             <div className="absolute inset-0 bg-cover bg-center opacity-40 transition-transform duration-1000 group-hover:scale-105" style={{backgroundImage: `url(${currentScene.mainStory.backgroundUrl})`}} />
+                             <div className="relative p-8 md:p-12 flex flex-col md:flex-row items-center gap-8">
+                                 <div className="flex-1 space-y-4">
+                                     <div className="inline-block px-3 py-1 bg-pink-500 text-white text-xs font-bold rounded-full">主线剧情</div>
+                                     <h3 className="text-3xl font-bold text-white">{currentScene.mainStory.name}</h3>
+                                     <p className="text-gray-300 leading-relaxed">{currentScene.mainStory.bio}</p>
+                                     <Button 
+                                       onClick={() => handleCharacterSelect(currentScene.mainStory!)}
+                                       className="bg-white text-black hover:bg-gray-200 mt-4 px-8"
+                                     >
+                                         开始故事
+                                     </Button>
+                                 </div>
+                                 <div className="w-48 h-64 shrink-0 rounded-xl overflow-hidden shadow-2xl border-4 border-white/10 rotate-3 transition-transform group-hover:rotate-0">
+                                     <img src={currentScene.mainStory.avatarUrl} className="w-full h-full object-cover" alt="Story Cover" />
+                                 </div>
+                             </div>
                         </div>
+                    </div>
+                )}
+                
+                <h3 className="text-xl font-bold text-gray-400 mb-4">登场人物</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {sceneCharacters.map(char => (
+                        <CharacterCard 
+                          key={char.id} 
+                          character={char} 
+                          customAvatarUrl={gameState.customAvatars[char.id]}
+                          isGenerating={gameState.generatingAvatarId === char.id}
+                          onSelect={handleCharacterSelect}
+                          onGenerate={handleGenerateAvatar}
+                        />
                     ))}
-                    {gameState.customScenarios.filter(s => s.sceneId === currentScene.id).length === 0 && (
-                        <p className="text-sm text-gray-600 col-span-3 text-center py-4">暂无自定义剧本。</p>
-                    )}
                 </div>
-             </div>
 
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 overflow-y-auto pb-10 scrollbar-hide">
-                 {currentScene.characters.map(char => (
-                     <CharacterCard 
-                       key={char.id} 
-                       character={char} 
-                       customAvatarUrl={gameState.customAvatars[char.id]}
-                       isGenerating={gameState.generatingAvatarId === char.id}
-                       onSelect={handleCharacterSelect}
-                       onGenerate={handleGenerateAvatar}
-                     />
-                 ))}
-                 
-                 {/* Main Story Card (Only for University Era currently) */}
-                 {currentScene.mainStory && (
-                     <div 
-                       onClick={() => handleCharacterSelect(currentScene.mainStory!)}
-                       className="group relative h-96 w-full cursor-pointer overflow-hidden rounded-3xl border-2 border-dashed border-indigo-500/50 hover:border-indigo-400 bg-indigo-900/10 flex flex-col items-center justify-center transition-all hover:scale-[1.02]"
-                     >
-                         <div className="text-4xl mb-4">📖</div>
-                         <h3 className="text-2xl font-bold text-indigo-300">主线故事</h3>
-                         <p className="text-indigo-400/60 text-sm mt-2">{currentScene.mainStory.name}</p>
-                     </div>
-                 )}
+                 <div className="mt-12 mb-20">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold text-gray-400">剧本分支</h3>
+                        <Button onClick={() => { setEditingScene(null); setGameState(prev => ({...prev, currentScreen: 'builder'})); }} variant="secondary" className="text-xs">
+                            + 创建剧本
+                        </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {gameState.customScenarios.filter(s => s.sceneId === currentScene.id).map(scenario => (
+                            <div key={scenario.id} className="group relative bg-gray-800 rounded-2xl p-6 border border-gray-700 hover:border-indigo-500 transition-all cursor-pointer hover:-translate-y-1" onClick={() => handlePlayScenario(scenario)}>
+                                <h4 className="text-lg font-bold text-white mb-2 group-hover:text-indigo-400">{scenario.title}</h4>
+                                <p className="text-sm text-gray-400 line-clamp-3 mb-4">{scenario.description}</p>
+                                <div className="flex justify-between items-center text-xs text-gray-500 border-t border-gray-700 pt-3">
+                                    <span>By {scenario.author}</span>
+                                    <span>{Object.keys(scenario.nodes).length} 个节点</span>
+                                </div>
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+                                     <button onClick={(e) => handleEditScenario(scenario, e)} className="p-1.5 hover:bg-white/10 rounded text-gray-300 pointer-events-auto" title="编辑">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>
+                                     </button>
+                                     <button onClick={(e) => handleDeleteScenario(scenario.id, e)} className="p-1.5 hover:bg-red-900/50 rounded text-gray-300 hover:text-red-400 pointer-events-auto" title="删除">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
+                                     </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                 </div>
              </div>
          </div>
       )}
 
-      {/* 6. Scenario Builder Screen */}
-      {gameState.currentScreen === 'builder' && (
-          <ScenarioBuilder 
-             initialScenario={editingScenario}
-             onSave={handleSaveScenario}
-             onCancel={() => setGameState(prev => ({ ...prev, currentScreen: 'characterSelection', editingScenarioId: null }))}
-          />
-      )}
-
-      {/* 7. Chat Window */}
-      {gameState.currentScreen === 'chat' && currentCharacter && gameState.userProfile && (
+      {gameState.currentScreen === 'chat' && currentCharacter && (
         <ChatWindow 
-          // IMPORTANT: Key forces remount when switching characters, cleaning up all internal state and hooks
-          key={currentCharacter.id}
-          character={currentCharacter}
+          character={currentCharacter} 
           customScenario={currentScenario || undefined}
           history={gameState.history[currentCharacter.id] || []}
           scenarioState={gameState.currentScenarioState}
-          userProfile={gameState.userProfile}
           settings={gameState.settings}
-          activeJournalEntryId={gameState.activeJournalEntryId} // Pass the context
+          userProfile={gameState.userProfile!}
+          activeJournalEntryId={gameState.activeJournalEntryId}
           onUpdateHistory={handleUpdateHistory}
+          onUpdateScenarioState={(nodeId) => setGameState(prev => ({ ...prev, currentScenarioState: { ...prev.currentScenarioState!, currentNodeId: nodeId } }))}
           onBack={handleChatBack}
-          onUpdateScenarioState={currentScenario ? (nodeId) => setGameState(prev => ({
-              ...prev, currentScenarioState: { scenarioId: currentScenario.id, currentNodeId: nodeId }
-          })) : undefined}
         />
       )}
 
-      {/* DEBUG CONSOLE */}
-      {gameState.settings.debugMode && (
-          <DebugConsole 
-            logs={gameState.debugLogs}
-            onClear={() => setGameState(prev => ({ ...prev, debugLogs: [] }))}
-            onClose={() => setGameState(prev => ({ ...prev, settings: { ...prev.settings, debugMode: false } }))}
+      {gameState.currentScreen === 'builder' && (
+          <ScenarioBuilder 
+            initialScenario={editingScenario}
+            onSave={handleSaveScenario}
+            onCancel={() => setGameState(prev => ({...prev, currentScreen: 'characterSelection', editingScenarioId: null}))}
           />
       )}
 
-      {/* MODALS */}
       {showSettingsModal && (
         <SettingsModal 
           settings={gameState.settings} 
           gameState={gameState}
-          onSettingsChange={(s) => setGameState(prev => ({ ...prev, settings: s }))} 
+          onSettingsChange={(newSettings) => setGameState(prev => ({ ...prev, settings: newSettings }))}
           onClose={() => setShowSettingsModal(false)} 
         />
       )}
 
       {showEraCreator && (
-        <EraConstructorModal 
-          initialScene={editingScene}
-          onSave={handleSaveEra} 
-          onClose={() => { setShowEraCreator(false); setEditingScene(null); }} 
-        />
+          <EraConstructorModal 
+             initialScene={editingScene}
+             onSave={handleSaveEra}
+             onClose={() => { setShowEraCreator(false); setEditingScene(null); }}
+          />
       )}
 
       {showCharacterCreator && currentScene && (
-          <CharacterConstructorModal
-            scene={currentScene}
-            onSave={handleSaveCharacter}
-            onClose={() => setShowCharacterCreator(false)}
-          />
-      )}
-      
-      {showMailbox && (
-          <MailboxModal
-            mails={gameState.mailbox}
-            onClose={() => setShowMailbox(false)}
-            onMarkAsRead={handleMarkMailRead}
+          <CharacterConstructorModal 
+             scene={currentScene}
+             onSave={handleSaveCharacter}
+             onClose={() => setShowCharacterCreator(false)}
           />
       )}
 
+      {showMailbox && (
+          <MailboxModal 
+             mails={gameState.mailbox}
+             onClose={() => setShowMailbox(false)}
+             onMarkAsRead={handleMarkMailRead}
+          />
+      )}
+      
       {showEraMemory && memoryScene && (
           <EraMemoryModal
-             scene={memoryScene}
-             memories={gameState.sceneMemories[memoryScene.id] || []}
-             onAddMemory={handleAddMemory}
-             onDeleteMemory={handleDeleteMemory}
-             onClose={() => { setShowEraMemory(false); setMemoryScene(null); }}
+              scene={memoryScene}
+              memories={gameState.sceneMemories[memoryScene.id] || []}
+              onAddMemory={handleAddMemory}
+              onDeleteMemory={handleDeleteMemory}
+              onClose={() => setShowEraMemory(false)}
+          />
+      )}
+      
+      {gameState.settings.debugMode && (
+          <DebugConsole 
+             logs={gameState.debugLogs} 
+             onClear={() => setGameState(prev => ({...prev, debugLogs: []}))}
+             onClose={() => setGameState(prev => ({...prev, settings: {...prev.settings, debugMode: false}}))}
           />
       )}
 

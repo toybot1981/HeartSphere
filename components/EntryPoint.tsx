@@ -50,7 +50,7 @@ export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettin
           className="group relative p-8 h-80 flex flex-col justify-end rounded-3xl border border-slate-700 bg-slate-900/50 backdrop-blur-sm cursor-pointer overflow-hidden transition-all hover:border-purple-400 hover:scale-[1.02] hover:shadow-2xl hover:shadow-purple-500/10"
         >
           <div className="absolute inset-0 opacity-20 group-hover:opacity-40 transition-opacity duration-500" style={{backgroundImage: `radial-gradient(circle at top right, #a855f7, transparent 50%)`}}></div>
-          <h2 className="text-3xl font-bold text-white mb-2 z-10">心域 <span className="font-light">HeartSphere</span></h2>
+          <h2 className="text-3xl font-bold text-white mb-2 z-10">我的心域 <span className="font-light text-xl">My HeartSphere</span></h2>
           <p className="text-slate-300 z-10">探索平行于现实的记忆与情感世界，寻找答案或体验不同的故事。</p>
         </div>
       </div>
