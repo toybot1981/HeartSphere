@@ -1,56 +1,50 @@
 
 import React from 'react';
-import { WorldScene, Character, GameState } from '../types';
-import { Button } from '../components/Button';
+import { WorldScene } from '../types';
 
 interface MobileSceneSelectionProps {
     scenes: WorldScene[];
-    customCharacters: Record<string, Character[]>;
-    onSelectCharacter: (char: Character, sceneId: string) => void;
+    onSelectScene: (sceneId: string) => void;
+    onCreateScene: () => void;
 }
 
-export const MobileSceneSelection: React.FC<MobileSceneSelectionProps> = ({ scenes, customCharacters, onSelectCharacter }) => {
+export const MobileSceneSelection: React.FC<MobileSceneSelectionProps> = ({ scenes, onSelectScene, onCreateScene }) => {
     return (
         <div className="h-full bg-black pb-20 overflow-y-auto">
-            <div className="p-4 sticky top-0 bg-black/80 backdrop-blur-md z-10 border-b border-white/10">
-                <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">选择连接对象</h1>
+            <div className="p-4 sticky top-0 bg-black/80 backdrop-blur-md z-10 border-b border-white/10 flex justify-between items-center">
+                <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">选择时代</h1>
+                <span className="text-xs text-gray-500">共 {scenes.length} 个世界</span>
             </div>
 
-            <div className="flex flex-col gap-8 p-4">
-                {scenes.map(scene => {
-                    const chars = [...scene.characters, ...(customCharacters[scene.id] || [])];
-                    return (
-                        <div key={scene.id} className="space-y-4">
-                            {/* Scene Header */}
-                            <div className="relative h-32 rounded-xl overflow-hidden group">
-                                <img src={scene.imageUrl} alt={scene.name} className="w-full h-full object-cover opacity-60" />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-                                <div className="absolute bottom-2 left-4">
-                                    <h3 className="text-lg font-bold text-white">{scene.name}</h3>
-                                    <p className="text-[10px] text-gray-300 line-clamp-1">{scene.description}</p>
-                                </div>
-                            </div>
-
-                            {/* Horizontal Scroll Characters */}
-                            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-                                {chars.map(char => (
-                                    <div 
-                                      key={char.id} 
-                                      onClick={() => onSelectCharacter(char, scene.id)}
-                                      className="flex-shrink-0 w-28 flex flex-col gap-2"
-                                    >
-                                        <div className="w-28 h-36 rounded-lg overflow-hidden border border-white/10 relative">
-                                            <img src={char.avatarUrl} className="w-full h-full object-cover" alt={char.name} />
-                                            <div className="absolute bottom-0 w-full bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">
-                                                <p className="text-xs text-white font-bold">{char.name}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+            <div className="flex flex-col gap-6 p-4">
+                {scenes.map(scene => (
+                    <div 
+                        key={scene.id} 
+                        onClick={() => onSelectScene(scene.id)}
+                        className="relative h-48 w-full rounded-2xl overflow-hidden group border border-white/10 shadow-lg active:scale-[0.98] transition-transform"
+                    >
+                        <img src={scene.imageUrl} alt={scene.name} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                        
+                        <div className="absolute bottom-0 left-0 w-full p-5">
+                            <h3 className="text-2xl font-bold text-white mb-1 shadow-black drop-shadow-md">{scene.name}</h3>
+                            <p className="text-xs text-gray-300 line-clamp-2 opacity-90">{scene.description}</p>
                         </div>
-                    );
-                })}
+                        
+                        <div className="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-2 py-1 rounded-full border border-white/10 text-[10px] text-white">
+                            进入 &rarr;
+                        </div>
+                    </div>
+                ))}
+
+                {/* Create New Scene Card */}
+                <button 
+                    onClick={onCreateScene}
+                    className="h-24 w-full rounded-2xl border-2 border-dashed border-gray-700 hover:border-pink-500/50 flex flex-col items-center justify-center gap-2 text-gray-500 hover:text-pink-400 transition-colors bg-white/5"
+                >
+                    <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-xl font-bold">+</div>
+                    <span className="text-sm font-bold">创造新时代</span>
+                </button>
             </div>
         </div>
     );

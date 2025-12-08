@@ -24,8 +24,17 @@ import { MobileApp } from './mobile/MobileApp';
 
 const App: React.FC = () => {
   
-  // Simple Client-Side Routing Check
-  const [isMobileMode, setIsMobileMode] = useState(false);
+  // --- Device Adaptation & Mode Switching ---
+  
+  const checkIsMobile = () => {
+    if (typeof window === 'undefined') return false;
+    const userAgent = navigator.userAgent || '';
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const isSmallScreen = window.innerWidth < 768;
+    return isMobileDevice || isSmallScreen;
+  };
+
+  const [isMobileMode, setIsMobileMode] = useState(checkIsMobile());
 
   const EXAMPLE_SCENARIO: CustomScenario = {
       id: 'example_scenario_01',
@@ -101,6 +110,10 @@ const App: React.FC = () => {
   const pendingActionRef = useRef<() => void>(() => {});
 
   const hasCheckedMail = useRef(false);
+  
+  // Use ref to access current gameState in event listeners without stale closures
+  const gameStateRef = useRef(gameState);
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
   // --- PERSISTENCE LOGIC ---
   
@@ -176,6 +189,39 @@ const App: React.FC = () => {
           }));
       });
   }, []);
+
+  // Responsive adaptation listener
+  useEffect(() => {
+    const handleResize = () => {
+      const shouldBeMobile = checkIsMobile();
+      if (shouldBeMobile !== isMobileMode) {
+        // If switching FROM PC to Mobile, save PC state first
+        if (!isMobileMode) {
+            storageService.saveState({ ...gameStateRef.current, lastLoginTime: Date.now() });
+        }
+        setIsMobileMode(shouldBeMobile);
+        
+        // If switching FROM Mobile to PC, we need to reload data because MobileApp maintained its own state
+        if (!shouldBeMobile) {
+            // Delay slightly to ensure DB write finishes if MobileApp was unmounting
+            setTimeout(() => loadGameData(), 200); 
+        }
+      }
+    };
+
+    // Debounce resize
+    let timeoutId: any;
+    const debouncedResize = () => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(handleResize, 300);
+    };
+
+    window.addEventListener('resize', debouncedResize);
+    return () => {
+        window.removeEventListener('resize', debouncedResize);
+        clearTimeout(timeoutId);
+    };
+  }, [isMobileMode]); 
 
   // Mail check
   useEffect(() => {
@@ -544,7 +590,18 @@ const App: React.FC = () => {
   };
 
   const handlePlayScenario = (scenario: CustomScenario) => {
-      const startNode = scenario.nodes[scenario.startNodeId];
+      let startNode = scenario.nodes[scenario.startNodeId];
+      
+      // Fallback if startNodeId is invalid
+      if (!startNode) {
+          const firstKey = Object.keys(scenario.nodes)[0];
+          if (firstKey) {
+              startNode = scenario.nodes[firstKey];
+          } else {
+              alert("错误：该剧本没有有效节点。");
+              return;
+          }
+      }
       
       const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
       const scene = allScenes.find(s => s.id === gameState.selectedSceneId);
@@ -561,7 +618,7 @@ const App: React.FC = () => {
           systemInstruction: 'You are the narrator.',
           themeColor: 'gray-500',
           colorAccent: '#6b7280',
-          firstMessage: startNode.prompt, 
+          firstMessage: startNode.prompt || '...', 
           voiceName: 'Kore'
       };
 
@@ -572,7 +629,7 @@ const App: React.FC = () => {
           selectedCharacterId: narrator.id,
           tempStoryCharacter: narrator, 
           selectedScenarioId: scenario.id,
-          currentScenarioState: { scenarioId: scenario.id, currentNodeId: scenario.startNodeId },
+          currentScenarioState: { scenarioId: scenario.id, currentNodeId: startNode.id },
           history: { ...prev.history, [narrator.id]: [] }, 
           currentScreen: 'chat'
       }));
@@ -690,6 +747,8 @@ const App: React.FC = () => {
       return WORLD_SCENES[0];
   };
 
+  // --- RENDER BLOCK (Must be last) ---
+  
   if (isMobileMode) {
       return <MobileApp onSwitchToPC={handleSwitchToPC} />;
   }

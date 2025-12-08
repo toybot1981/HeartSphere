@@ -1,27 +1,32 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GameState, Character, Message, WorldScene, JournalEntry, AppSettings } from '../types';
+import { GameState, Character, Message, WorldScene, JournalEntry, AppSettings, CustomScenario } from '../types';
 import { geminiService } from '../services/gemini';
 import { storageService } from '../services/storage';
 import { WORLD_SCENES } from '../constants';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MobileRealWorld } from './MobileRealWorld';
 import { MobileSceneSelection } from './MobileSceneSelection';
+import { MobileCharacterSelection } from './MobileCharacterSelection';
 import { MobileProfile } from './MobileProfile';
+import { MobileScenarioBuilder } from './MobileScenarioBuilder'; // Imported Mobile Builder
 import { ChatWindow } from '../components/ChatWindow';
 import { ConnectionSpace } from '../components/ConnectionSpace';
 import { LoginModal } from '../components/LoginModal';
 import { SettingsModal } from '../components/SettingsModal';
 import { MailboxModal } from '../components/MailboxModal';
 
+// Modals reuse
+import { EraConstructorModal } from '../components/EraConstructorModal';
+import { CharacterConstructorModal } from '../components/CharacterConstructorModal';
+
 interface MobileAppProps {
     onSwitchToPC: () => void;
 }
 
 export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
-    // --- STATE REPLICATION FROM APP.TSX ---
-    // (Simplified for mobile context)
     
+    // --- STATE ---
     const DEFAULT_STATE: GameState = {
         currentScreen: 'profileSetup',
         userProfile: null,
@@ -62,16 +67,19 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
     const [gameState, setGameState] = useState<GameState>(DEFAULT_STATE);
     const [isLoaded, setIsLoaded] = useState(false);
     const [profileNickname, setProfileNickname] = useState('');
-    const [showLogin, setShowLogin] = useState(false);
+    
+    // UI States
     const [showSettings, setShowSettings] = useState(false);
     const [showMailbox, setShowMailbox] = useState(false);
+    const [showEraCreator, setShowEraCreator] = useState(false);
+    const [showCharacterCreator, setShowCharacterCreator] = useState(false);
+    const [showScenarioBuilder, setShowScenarioBuilder] = useState(false);
 
     // --- INIT & STORAGE ---
     useEffect(() => {
         const init = async () => {
             const loaded = await storageService.loadState();
             if (loaded) {
-                // Merge Logic simplified
                 setGameState(prev => ({ ...prev, ...loaded, currentScreen: loaded.userProfile ? 'realWorld' : 'profileSetup', debugLogs: [] }));
                 if (loaded.settings) geminiService.updateConfig(loaded.settings as AppSettings);
             }
@@ -90,7 +98,6 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
     // --- ACTIONS ---
 
     const handleSwitchToPCWrapper = async () => {
-        // Ensure state is saved before notifying parent to switch context
         await storageService.saveState({ ...gameState, lastLoginTime: Date.now() });
         onSwitchToPC();
     };
@@ -104,20 +111,137 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
         }));
     };
 
-    const handleSelectCharacter = (char: Character, sceneId: string) => {
+    // --- SCENE & CHAR LOGIC ---
+
+    const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
+    const currentScene = allScenes.find(s => s.id === gameState.selectedSceneId);
+    
+    // Get Characters for current scene
+    const currentSceneChars = currentScene 
+        ? [...currentScene.characters, ...(gameState.customCharacters[currentScene.id] || [])]
+        : [];
+        
+    // Get Scenarios for current scene
+    const currentSceneScenarios = currentScene
+        ? gameState.customScenarios.filter(s => s.sceneId === currentScene.id)
+        : [];
+
+    let activeCharacter = null;
+    if (currentScene && gameState.selectedCharacterId) {
+        // Also check if it's the narrator for a scenario
+        if (gameState.tempStoryCharacter && gameState.tempStoryCharacter.id === gameState.selectedCharacterId) {
+             activeCharacter = gameState.tempStoryCharacter;
+        } else {
+             activeCharacter = currentSceneChars.find(c => c.id === gameState.selectedCharacterId);
+             // Fallback to main story if id matches
+             if (!activeCharacter && currentScene.mainStory?.id === gameState.selectedCharacterId) {
+                 activeCharacter = currentScene.mainStory;
+             }
+        }
+    }
+
+    const handleSelectScene = (sceneId: string) => {
         setGameState(prev => ({
             ...prev,
             selectedSceneId: sceneId,
+            selectedCharacterId: null,
+            currentScreen: 'characterSelection' // Go to detail view
+        }));
+    };
+
+    const handleSelectCharacter = (char: Character) => {
+        setGameState(prev => ({
+            ...prev,
             selectedCharacterId: char.id,
+            tempStoryCharacter: null,
+            selectedScenarioId: null,
+            currentScenarioState: undefined,
             currentScreen: 'chat'
         }));
     };
+
+    const handlePlayScenario = (scenario: CustomScenario) => {
+        let startNode = scenario.nodes[scenario.startNodeId];
+        
+        // Safety: If startNode is missing, try to find the first node available
+        if (!startNode) {
+            const firstKey = Object.keys(scenario.nodes)[0];
+            if (firstKey) {
+                startNode = scenario.nodes[firstKey];
+            } else {
+                alert("错误：该剧本没有有效节点。");
+                return;
+            }
+        }
+
+        const scene = allScenes.find(s => s.id === gameState.selectedSceneId);
+        const sceneImage = scene?.imageUrl || '';
+
+        const narrator: Character = {
+            id: `narrator_${scenario.id}`,
+            name: '旁白',
+            age: 0,
+            role: 'Narrator',
+            bio: 'AI Narrator',
+            avatarUrl: sceneImage, 
+            backgroundUrl: sceneImage, 
+            systemInstruction: 'You are the narrator.',
+            themeColor: 'gray-500',
+            colorAccent: '#6b7280',
+            firstMessage: startNode.prompt || '...', 
+            voiceName: 'Kore'
+        };
+
+        geminiService.resetSession(narrator.id);
+
+        setGameState(prev => ({
+            ...prev,
+            selectedCharacterId: narrator.id,
+            tempStoryCharacter: narrator, 
+            selectedScenarioId: scenario.id,
+            currentScenarioState: { scenarioId: scenario.id, currentNodeId: startNode.id },
+            history: { ...prev.history, [narrator.id]: [] }, 
+            currentScreen: 'chat'
+        }));
+    };
+
+    // --- CREATION HANDLERS ---
+
+    const handleSaveEra = (newScene: WorldScene) => {
+        setGameState(prev => ({
+            ...prev,
+            customScenes: [...prev.customScenes, newScene]
+        }));
+        setShowEraCreator(false);
+    };
+
+    const handleSaveCharacter = (newCharacter: Character) => {
+        if (!gameState.selectedSceneId) return;
+        setGameState(prev => ({
+            ...prev,
+            customCharacters: {
+                ...prev.customCharacters,
+                [prev.selectedSceneId!]: [...(prev.customCharacters[prev.selectedSceneId!] || []), newCharacter]
+            }
+        }));
+        setShowCharacterCreator(false);
+    };
+
+    const handleSaveScenario = (scenario: CustomScenario) => {
+        if (!gameState.selectedSceneId) return;
+        const completeScenario = { ...scenario, sceneId: gameState.selectedSceneId };
+        setGameState(prev => ({
+            ...prev,
+            customScenarios: [...prev.customScenarios, completeScenario]
+        }));
+        setShowScenarioBuilder(false);
+    };
+
 
     // --- RENDER ---
     
     if (!isLoaded) return <div className="h-screen bg-black flex items-center justify-center text-white">Loading Mobile Core...</div>;
 
-    // PROFILE SETUP (Mobile version)
     if (gameState.currentScreen === 'profileSetup') {
         return (
             <div className="h-screen w-full bg-black flex flex-col items-center justify-center p-6 space-y-6">
@@ -131,15 +255,6 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                 <button onClick={handleProfileSubmit} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">进入心域</button>
             </div>
         );
-    }
-
-    // MAIN APP SCREENS
-    const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
-    const currentScene = allScenes.find(s => s.id === gameState.selectedSceneId);
-    let currentCharacter = null;
-    if (currentScene && gameState.selectedCharacterId) {
-        const chars = [...currentScene.characters, ...(gameState.customCharacters[currentScene.id] || [])];
-        currentCharacter = chars.find(c => c.id === gameState.selectedCharacterId);
     }
 
     return (
@@ -165,8 +280,21 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                 {gameState.currentScreen === 'sceneSelection' && (
                     <MobileSceneSelection 
                         scenes={allScenes}
-                        customCharacters={gameState.customCharacters}
+                        onSelectScene={handleSelectScene}
+                        onCreateScene={() => setShowEraCreator(true)}
+                    />
+                )}
+
+                {gameState.currentScreen === 'characterSelection' && currentScene && (
+                    <MobileCharacterSelection 
+                        scene={currentScene}
+                        characters={currentSceneChars}
+                        scenarios={currentSceneScenarios}
+                        onBack={() => setGameState(prev => ({ ...prev, currentScreen: 'sceneSelection', selectedSceneId: null }))}
                         onSelectCharacter={handleSelectCharacter}
+                        onPlayScenario={handlePlayScenario}
+                        onAddCharacter={() => setShowCharacterCreator(true)}
+                        onAddScenario={() => setShowScenarioBuilder(true)}
                     />
                 )}
 
@@ -175,9 +303,16 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                         characters={allScenes.flatMap(s => [...s.characters, ...(gameState.customCharacters[s.id]||[])])}
                         userProfile={gameState.userProfile}
                         onConnect={(char) => {
-                             // Find scene for char
+                             // Find scene for char to set context
                              const s = allScenes.find(sc => [...sc.characters, ...(gameState.customCharacters[sc.id]||[])].some(c => c.id === char.id));
-                             if (s) handleSelectCharacter(char, s.id);
+                             if (s) {
+                                 setGameState(prev => ({
+                                     ...prev,
+                                     selectedSceneId: s.id,
+                                     selectedCharacterId: char.id,
+                                     currentScreen: 'chat'
+                                 }));
+                             }
                         }}
                         onBack={() => setGameState(prev => ({...prev, currentScreen: 'sceneSelection'}))}
                     />
@@ -198,16 +333,19 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                     />
                 )}
 
-                {gameState.currentScreen === 'chat' && currentCharacter && (
+                {gameState.currentScreen === 'chat' && activeCharacter && (
                     <div className="h-full pb-0 relative z-20"> 
                         <ChatWindow 
-                            character={currentCharacter}
-                            history={gameState.history[currentCharacter.id] || []}
+                            character={activeCharacter}
+                            customScenario={gameState.selectedScenarioId ? gameState.customScenarios.find(s => s.id === gameState.selectedScenarioId) : undefined}
+                            history={gameState.history[activeCharacter.id] || []}
+                            scenarioState={gameState.currentScenarioState}
                             settings={gameState.settings}
                             userProfile={gameState.userProfile!}
                             activeJournalEntryId={gameState.activeJournalEntryId}
-                            onUpdateHistory={(msgs) => setGameState(prev => ({...prev, history: {...prev.history, [currentCharacter!.id]: msgs}}))}
-                            onBack={() => setGameState(prev => ({...prev, currentScreen: 'sceneSelection', selectedCharacterId: null}))}
+                            onUpdateHistory={(msgs) => setGameState(prev => ({...prev, history: {...prev.history, [activeCharacter!.id]: msgs}}))}
+                            onUpdateScenarioState={(nodeId) => setGameState(prev => ({ ...prev, currentScenarioState: { ...prev.currentScenarioState!, currentNodeId: nodeId } }))}
+                            onBack={() => setGameState(prev => ({...prev, currentScreen: 'characterSelection', selectedCharacterId: null, tempStoryCharacter: null, selectedScenarioId: null }))}
                         />
                     </div>
                 )}
@@ -232,8 +370,33 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                 />
             )}
 
-            {/* NAV BAR (Hide in Chat and Connection Space) */}
-            {gameState.currentScreen !== 'chat' && gameState.currentScreen !== 'connectionSpace' && (
+            {/* CREATOR MODALS */}
+            {showEraCreator && (
+                <EraConstructorModal 
+                    onSave={handleSaveEra}
+                    onClose={() => setShowEraCreator(false)}
+                />
+            )}
+            
+            {showCharacterCreator && currentScene && (
+                <CharacterConstructorModal
+                    scene={currentScene}
+                    onSave={handleSaveCharacter}
+                    onClose={() => setShowCharacterCreator(false)}
+                />
+            )}
+            
+            {showScenarioBuilder && (
+                 <div className="absolute inset-0 z-50 bg-black">
+                     <MobileScenarioBuilder 
+                         onSave={handleSaveScenario}
+                         onCancel={() => setShowScenarioBuilder(false)}
+                     />
+                 </div>
+            )}
+
+            {/* NAV BAR */}
+            {gameState.currentScreen !== 'chat' && gameState.currentScreen !== 'connectionSpace' && !showScenarioBuilder && (
                 <MobileBottomNav 
                     currentScreen={gameState.currentScreen}
                     onNavigate={(s) => setGameState(prev => ({...prev, currentScreen: s}))}
