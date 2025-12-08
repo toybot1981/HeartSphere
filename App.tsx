@@ -18,7 +18,7 @@ import { EraMemoryModal } from './components/EraMemoryModal';
 import { Button } from './components/Button';
 import { DebugConsole } from './components/DebugConsole';
 import { ConnectionSpace } from './components/ConnectionSpace';
-import { AdminScreen } from './components/AdminScreen';
+import { AdminScreen } from './admin/AdminScreen';
 
 const App: React.FC = () => {
   
