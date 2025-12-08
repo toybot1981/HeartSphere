@@ -27,7 +27,7 @@ export interface Character {
 
   // --- New Deep Personality Fields ---
   mbti?: string;             // e.g., "INFJ"
-  tags?: string[];           // e.g., ["Tsundere", "Hacker", "Cat Lover"]
+  tags?: string[];           // e.g., "Tsundere", "Hacker", "Cat Lover"
   speechStyle?: string;      // e.g., "Short, coded, uses slang"
   catchphrases?: string[];   // e.g., "Interesting.", "Baka!"
   secrets?: string;          // Hidden depth not known to user initially
@@ -160,7 +160,7 @@ export interface DebugLog {
 }
 
 export interface GameState {
-  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder' | 'connectionSpace';
+  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder' | 'connectionSpace' | 'admin';
   userProfile: UserProfile | null;
   selectedSceneId: string | null;
   selectedCharacterId: string | null;

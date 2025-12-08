@@ -1,7 +1,4 @@
 
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { WORLD_SCENES, APP_TITLE } from './constants';
 import { ChatWindow } from './components/ChatWindow';
@@ -21,6 +18,7 @@ import { EraMemoryModal } from './components/EraMemoryModal';
 import { Button } from './components/Button';
 import { DebugConsole } from './components/DebugConsole';
 import { ConnectionSpace } from './components/ConnectionSpace';
+import { AdminScreen } from './components/AdminScreen';
 
 const App: React.FC = () => {
   
@@ -96,7 +94,11 @@ const App: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showEraCreator, setShowEraCreator] = useState(false);
   const [editingScene, setEditingScene] = useState<WorldScene | null>(null); 
+  
   const [showCharacterCreator, setShowCharacterCreator] = useState(false);
+  const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
+  const [editingCharacterSceneId, setEditingCharacterSceneId] = useState<string | null>(null);
+
   const [showMailbox, setShowMailbox] = useState(false);
   
   const [showEraMemory, setShowEraMemory] = useState(false);
@@ -401,9 +403,11 @@ const App: React.FC = () => {
     setEditingScene(null);
   };
 
-  const handleDeleteEra = (sceneId: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
+  const handleDeleteEra = (sceneId: string, e?: React.MouseEvent) => {
+      if (e) {
+          e.stopPropagation();
+          e.preventDefault();
+      }
       if(window.confirm("确定要删除这个时代吗？里面的所有角色和记忆都将消失。")) {
           setGameState(prev => ({
               ...prev,
@@ -413,34 +417,52 @@ const App: React.FC = () => {
                  Object.entries(prev.customCharacters).filter(([id]) => id !== sceneId)
               )
           }));
+          setShowEraCreator(false);
+          setEditingScene(null);
       }
   };
 
   const handleSaveCharacter = (newCharacter: Character) => {
-    if (!gameState.selectedSceneId) return;
+    const sceneId = gameState.selectedSceneId || editingCharacterSceneId;
     
-    // Updated Logic: Save to customCharacters map instead of mutating customScenes directly
-    // This allows adding characters to BOTH built-in scenes and custom scenes
+    if (!sceneId) {
+        console.error("No scene context for saving character");
+        return;
+    }
+    
     setGameState(prev => {
-        const sceneId = prev.selectedSceneId!;
         const existingCustomChars = prev.customCharacters[sceneId] || [];
+        const isEditing = existingCustomChars.some(c => c.id === newCharacter.id);
         
+        let newChars = [];
+        if (isEditing) {
+            newChars = existingCustomChars.map(c => c.id === newCharacter.id ? newCharacter : c);
+        } else {
+            newChars = [...existingCustomChars, newCharacter];
+        }
+
         return {
             ...prev,
             customCharacters: {
                 ...prev.customCharacters,
-                [sceneId]: [...existingCustomChars, newCharacter]
+                [sceneId]: newChars
             }
         };
     });
     
     setShowCharacterCreator(false);
+    setEditingCharacter(null);
+    setEditingCharacterSceneId(null);
   };
 
   const handleSaveScenario = (scenario: CustomScenario) => {
-    if (!gameState.selectedSceneId) return;
+    if (!gameState.selectedSceneId && !gameState.editingScenarioId) return;
     
-    const completeScenario = { ...scenario, sceneId: gameState.selectedSceneId };
+    // Use existing scene ID if editing, or current selected if new
+    const sceneId = gameState.selectedSceneId || gameState.customScenarios.find(s => s.id === scenario.id)?.sceneId;
+    if (!sceneId) return;
+
+    const completeScenario = { ...scenario, sceneId };
     
     setGameState(prev => {
         const exists = prev.customScenarios.some(s => s.id === scenario.id);
@@ -453,7 +475,7 @@ const App: React.FC = () => {
         return {
             ...prev,
             customScenarios: newScenarios,
-            currentScreen: 'characterSelection', 
+            currentScreen: prev.currentScreen === 'builder' ? 'characterSelection' : prev.currentScreen, // Return to previous screen
             editingScenarioId: null
         };
     });
@@ -601,6 +623,25 @@ const App: React.FC = () => {
       setMemoryScene(scene);
       setShowEraMemory(true);
   };
+  
+  // --- HELPERS FOR ADMIN/EDITING ---
+  
+  const launchEditCharacter = (char: Character, sceneId: string) => {
+      setEditingCharacter(char);
+      setEditingCharacterSceneId(sceneId);
+      setShowCharacterCreator(true);
+  };
+
+  // We need to construct the current scene object for the character creator
+  const getEditingCharacterScene = () => {
+      if (gameState.selectedSceneId) {
+          return [...WORLD_SCENES, ...gameState.customScenes].find(s => s.id === gameState.selectedSceneId) || WORLD_SCENES[0];
+      }
+      if (editingCharacterSceneId) {
+          return [...WORLD_SCENES, ...gameState.customScenes].find(s => s.id === editingCharacterSceneId) || WORLD_SCENES[0];
+      }
+      return WORLD_SCENES[0];
+  };
 
 
   if (!isLoaded) return <div className="h-screen w-screen bg-black flex items-center justify-center text-white">Loading HeartSphere Core...</div>;
@@ -701,6 +742,15 @@ const App: React.FC = () => {
           />
       )}
 
+      {gameState.currentScreen === 'admin' && (
+          <AdminScreen 
+             gameState={gameState}
+             onUpdateGameState={(newState) => setGameState(newState)}
+             onResetWorld={() => storageService.clearMemory()}
+             onBack={handleEnterNexus}
+          />
+      )}
+
       {gameState.currentScreen === 'sceneSelection' && (
         <div className="h-full flex flex-col p-8 bg-gradient-to-br from-gray-900 to-black">
            <div className="flex justify-between items-center mb-6">
@@ -763,7 +813,7 @@ const App: React.FC = () => {
                         <SceneCard scene={scene} onSelect={() => handleSceneSelect(scene.id)} />
                         
                         {isCustom && (
-                            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-30">
+                            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none group-hover:pointer-events-auto">
                                 <button 
                                 onClick={(e) => { e.stopPropagation(); setEditingScene(scene); setShowEraCreator(true); }}
                                 className="relative p-2 bg-black/60 rounded-full hover:bg-white/20 border border-white/20 text-white z-40 pointer-events-auto"
@@ -804,7 +854,7 @@ const App: React.FC = () => {
                      <h2 className="text-3xl font-bold text-white">{currentScene.name}</h2>
                  </div>
                  <div className="flex gap-2">
-                     <Button onClick={() => setShowCharacterCreator(true)} className="text-sm">
+                     <Button onClick={() => { setEditingCharacter(null); setEditingCharacterSceneId(currentScene.id); setShowCharacterCreator(true); }} className="text-sm">
                         + 新增角色
                      </Button>
                  </div>
@@ -917,15 +967,21 @@ const App: React.FC = () => {
           <EraConstructorModal 
              initialScene={editingScene}
              onSave={handleSaveEra}
+             onDelete={editingScene ? () => handleDeleteEra(editingScene.id) : undefined}
              onClose={() => { setShowEraCreator(false); setEditingScene(null); }}
           />
       )}
 
-      {showCharacterCreator && currentScene && (
+      {showCharacterCreator && (
           <CharacterConstructorModal 
-             scene={currentScene}
+             scene={getEditingCharacterScene()}
+             initialCharacter={editingCharacter}
              onSave={handleSaveCharacter}
-             onClose={() => setShowCharacterCreator(false)}
+             onClose={() => {
+                 setShowCharacterCreator(false);
+                 setEditingCharacter(null);
+                 setEditingCharacterSceneId(null);
+             }}
           />
       )}
 

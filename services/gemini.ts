@@ -25,7 +25,7 @@ const formatOpenAIHistory = (history: Message[], systemInstruction: string) => {
 };
 
 export class GeminiService {
-  private ai: GoogleGenAI;
+  private ai?: GoogleGenAI;
   private chatSessions: Map<string, Chat> = new Map();
   
   // Configuration State
@@ -35,8 +35,15 @@ export class GeminiService {
   private logCallback: ((log: DebugLog) => void) | null = null;
 
   constructor() {
-    // Default initialization with environment key, can be overridden by settings
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Default initialization with environment key if available
+    // Prevent crash if API_KEY is missing during startup
+    if (process.env.API_KEY) {
+      try {
+        this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      } catch (e) {
+        console.warn("Failed to initialize GoogleGenAI with process.env.API_KEY", e);
+      }
+    }
   }
 
   // Hook for App.tsx to receive logs
@@ -73,6 +80,12 @@ export class GeminiService {
     // If empty, we keep the default constructor instance (which might have process.env.API_KEY)
     if (settings.geminiConfig.apiKey) {
         this.ai = new GoogleGenAI({ apiKey: settings.geminiConfig.apiKey });
+    } else if (process.env.API_KEY) {
+        // Fallback to env key if settings key is cleared/empty
+        this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    } else {
+        // No key available
+        this.ai = undefined;
     }
     // Clear sessions on config change to avoid stale state
     this.chatSessions.clear();
@@ -154,12 +167,15 @@ export class GeminiService {
       // Gemini can use process.env.API_KEY if config.apiKey is missing
       const effectiveKey = config?.apiKey || (provider === 'gemini' ? process.env.API_KEY : '');
 
-      if (!config || !effectiveKey) throw new Error(`Config/Key missing for ${provider}`);
+      if (provider !== 'gemini' && (!config || !effectiveKey)) {
+         throw new Error(`Config/Key missing for ${provider}`);
+      }
       
-      const modelName = config.modelName;
+      const modelName = config?.modelName || 'gemini-2.5-flash';
 
       // 1. OpenAI / Qwen / Doubao
       if (provider === 'openai' || provider === 'qwen' || provider === 'doubao') {
+            if (!config) throw new Error("Provider config missing");
             const baseUrl = config.baseUrl || (provider === 'openai' ? 'https://api.openai.com/v1' : provider === 'doubao' ? 'https://ark.cn-beijing.volces.com/api/v3' : 'https://dashscope.aliyuncs.com/compatible-mode/v1');
             const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
@@ -255,9 +271,13 @@ export class GeminiService {
           const geminiConfig: any = { systemInstruction };
           if (jsonMode) geminiConfig.responseMimeType = "application/json";
 
-          // Use specific key if configured, otherwise fallback to this.ai (which has env key)
-          const client = config.apiKey ? new GoogleGenAI({ apiKey: config.apiKey }) : this.ai;
+          // Use specific key if configured, otherwise fallback to this.ai
+          const client = (config && config.apiKey) ? new GoogleGenAI({ apiKey: config.apiKey }) : this.ai;
           
+          if (!client) {
+             throw new Error("Gemini API Key is not configured. Please set it in Settings.");
+          }
+
           try {
             const response = await client.models.generateContent({
                 model: modelName,
@@ -282,8 +302,10 @@ export class GeminiService {
           this.log('executeImage', 'request', { prompt, aspectRatio }, model, provider);
 
           // Use specific key if configured
-          const client = config?.apiKey ? new GoogleGenAI({apiKey: config.apiKey}) : this.ai;
+          const client = (config && config.apiKey) ? new GoogleGenAI({apiKey: config.apiKey}) : this.ai;
           
+          if (!client) throw new Error("Gemini API Key missing");
+
           const response = await client.models.generateContent({
             model: model,
             contents: { parts: [{ text: prompt }] },
@@ -386,8 +408,10 @@ export class GeminiService {
           
           this.log('executeVideo', 'request', { prompt }, model, provider);
           
-          const client = config?.apiKey ? new GoogleGenAI({apiKey: config.apiKey}) : this.ai;
+          const client = (config && config.apiKey) ? new GoogleGenAI({apiKey: config.apiKey}) : this.ai;
           const effectiveKey = config?.apiKey || process.env.API_KEY;
+
+          if (!client) throw new Error("Gemini API Key missing");
 
           let operation = await client.models.generateVideos({
               model: model,
@@ -561,6 +585,10 @@ export class GeminiService {
       const config = this.getConfigForProvider('gemini');
       const modelName = config?.modelName || 'gemini-2.5-flash';
       const apiKey = config?.apiKey || process.env.API_KEY;
+
+      if (!apiKey) {
+          throw new Error("Gemini API Key is missing. Check your settings.");
+      }
       
       const client = new GoogleGenAI({ apiKey });
 
@@ -600,7 +628,10 @@ export class GeminiService {
             const config = this.getConfigForProvider(provider);
             const effectiveKey = config?.apiKey || (provider === 'gemini' ? process.env.API_KEY : '');
             
-            if (!config || !effectiveKey) continue;
+            if (!config || !effectiveKey) {
+                 if (providers.length === 1) throw new Error(`${provider} API Key missing.`);
+                 continue;
+            }
             
             this.log('sendMessageStream', 'attempt', { provider }, config.modelName);
 
@@ -780,7 +811,10 @@ export class GeminiService {
     const effectiveKey = config?.apiKey || process.env.API_KEY;
 
     return this.retry(async () => {
+        // Safe Client Creation
         const client = effectiveKey ? new GoogleGenAI({apiKey: effectiveKey}) : this.ai;
+        if (!client) throw new Error("Gemini API Key missing for TTS");
+
         const response = await client.models.generateContent({
             model: model,
             contents: { parts: [{ text }] },

@@ -1,16 +1,17 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Character, WorldScene } from '../types';
 import { geminiService } from '../services/gemini';
 import { Button } from './Button';
 
 interface CharacterConstructorModalProps {
   scene: WorldScene;
+  initialCharacter?: Character | null; // Support editing
   onSave: (character: Character) => void;
   onClose: () => void;
 }
 
-export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps> = ({ scene, onSave, onClose }) => {
+export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps> = ({ scene, initialCharacter, onSave, onClose }) => {
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,6 +19,12 @@ export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps>
   
   // Edit Mode State
   const [activeTab, setActiveTab] = useState<'basic' | 'personality' | 'depth'>('basic');
+
+  useEffect(() => {
+    if (initialCharacter) {
+      setGeneratedCharacter(initialCharacter);
+    }
+  }, [initialCharacter]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -143,10 +150,10 @@ export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps>
       <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
         <div className="mb-4">
             <h3 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
-            {generatedCharacter ? '角色编辑器' : '角色构造器'}
+            {initialCharacter ? '角色编辑器' : '角色构造器'}
             </h3>
             <p className="text-sm text-gray-400">
-                {generatedCharacter ? '微调TA的灵魂设定。' : `为时代 “${scene.name}” 注入新的灵魂。`}
+                {initialCharacter ? '微调TA的灵魂设定。' : `为时代 “${scene.name}” 注入新的灵魂。`}
             </p>
         </div>
         
@@ -174,7 +181,7 @@ export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps>
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-700/50 mt-4 shrink-0">
             <Button variant="ghost" onClick={onClose} disabled={isLoading}>取消</Button>
             <Button onClick={handleSave} disabled={isLoading || !generatedCharacter}>
-                {generatedCharacter ? '保存角色' : '添加到时代'}
+                {initialCharacter ? '保存修改' : '添加到时代'}
             </Button>
         </div>
       </div>

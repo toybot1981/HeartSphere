@@ -2,7 +2,7 @@
 import React from 'react';
 
 interface EntryPointProps {
-  onNavigate: (screen: 'realWorld' | 'sceneSelection') => void;
+  onNavigate: (screen: 'realWorld' | 'sceneSelection' | 'admin') => void;
   onOpenSettings: () => void;
   nickname: string;
 }
@@ -13,6 +13,19 @@ export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettin
       <div className="absolute inset-0 z-0">
         <img src="https://picsum.photos/seed/nexus_point/1920/1080" className="w-full h-full object-cover opacity-30" alt="Nexus Background" />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
+      </div>
+
+      {/* Admin Access (Top Left - Hidden/Subtle) */}
+      <div className="absolute top-6 left-6 z-20">
+        <button
+          onClick={() => onNavigate('admin')}
+          className="p-3 text-slate-500 hover:text-red-400 bg-transparent hover:bg-black/40 rounded-full transition-all opacity-50 hover:opacity-100 group"
+          title="系统管理"
+        >
+           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+           </svg>
+        </button>
       </div>
 
       {/* Settings Button - Optimized for visibility */}

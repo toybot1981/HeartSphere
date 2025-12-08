@@ -7,10 +7,11 @@ import { Button } from './Button';
 interface EraConstructorModalProps {
   initialScene?: WorldScene | null; // Optional: If provided, we are editing
   onSave: (scene: WorldScene) => void;
+  onDelete?: () => void;
   onClose: () => void;
 }
 
-export const EraConstructorModal: React.FC<EraConstructorModalProps> = ({ initialScene, onSave, onClose }) => {
+export const EraConstructorModal: React.FC<EraConstructorModalProps> = ({ initialScene, onSave, onDelete, onClose }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -203,6 +204,11 @@ export const EraConstructorModal: React.FC<EraConstructorModalProps> = ({ initia
         {error && <p className="text-sm text-red-400">{error}</p>}
 
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-700/50">
+            {initialScene && onDelete && (
+                <Button variant="ghost" onClick={onDelete} className="mr-auto text-red-400 hover:text-red-300 hover:bg-red-900/20">
+                    删除时代
+                </Button>
+            )}
             <Button variant="ghost" onClick={onClose}>取消</Button>
             <Button onClick={handleSave} disabled={isSaveDisabled}>
                 {imageMode === 'upload' ? '封存记忆' : initialScene ? '保存修改' : '创建时代'}
