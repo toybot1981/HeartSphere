@@ -1,6 +1,8 @@
 
 
 
+
+
 import React, { useState } from 'react';
 import { JournalEntry } from '../types';
 import { Button } from './Button';
@@ -12,14 +14,15 @@ interface RealWorldScreenProps {
   onUpdateEntry: (entry: JournalEntry) => void;
   onDeleteEntry: (id: string) => void;
   onExplore: (entry: JournalEntry) => void;
-  onChatWithCharacter: (characterName: string) => void; // New prop
+  onChatWithCharacter: (characterName: string) => void;
   onBack: () => void;
-  autoGenerateImage: boolean; // New prop to control auto generation
+  onConsultMirror: (content: string, recentContext: string[]) => Promise<string | null>; // Updated prop
+  autoGenerateImage: boolean;
 }
 
-export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAddEntry, onUpdateEntry, onDeleteEntry, onExplore, onChatWithCharacter, onBack, autoGenerateImage }) => {
-  const [isCreating, setIsCreating] = useState(false); // Controls visibility of the form
-  const [isEditing, setIsEditing] = useState(false); // Controls whether we are editing an existing entry
+export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAddEntry, onUpdateEntry, onDeleteEntry, onExplore, onChatWithCharacter, onBack, onConsultMirror, autoGenerateImage }) => {
+  const [isCreating, setIsCreating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
@@ -57,7 +60,7 @@ export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAdd
     }
   };
 
-  const handleConsultMirror = async () => {
+  const handleConsultMirrorClick = async () => {
     if (!newContent.trim() || isConsultingMirror) return;
     setIsConsultingMirror(true);
     try {
@@ -67,7 +70,7 @@ export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAdd
             .slice(0, 5)
             .map(e => `[${new Date(e.timestamp).toLocaleDateString()}] ${e.content}`);
         
-        const insight = await geminiService.generateMirrorInsight(newContent, recentEntries);
+        const insight = await onConsultMirror(newContent, recentEntries);
         if (insight) {
             setMirrorInsight(insight);
         }
@@ -157,7 +160,7 @@ export const RealWorldScreen: React.FC<RealWorldScreenProps> = ({ entries, onAdd
           />
           {/* Mirror Button (Floating or Integrated) */}
           <button 
-            onClick={handleConsultMirror}
+            onClick={handleConsultMirrorClick}
             disabled={isConsultingMirror || !newContent.trim()}
             className="absolute bottom-4 right-4 bg-cyan-900/80 backdrop-blur-md border border-cyan-500/50 text-cyan-200 px-3 py-1.5 rounded-full text-sm font-bold shadow-lg hover:bg-cyan-800 hover:text-white transition-all flex items-center gap-2"
             title="唤醒本我镜像：分析潜意识模式"

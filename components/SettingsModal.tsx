@@ -1,6 +1,4 @@
 
-
-
 import React, { useRef, useState } from 'react';
 import { AppSettings, GameState, AIProvider } from '../types';
 import { Button } from './Button';
@@ -11,6 +9,7 @@ interface SettingsModalProps {
   gameState: GameState; // Pass full state for backup
   onSettingsChange: (newSettings: AppSettings) => void;
   onClose: () => void;
+  onLogout: () => void;
 }
 
 const Toggle: React.FC<{ label: string; description: string; enabled: boolean; onChange: (enabled: boolean) => void; }> = ({ label, description, enabled, onChange }) => (
@@ -47,7 +46,7 @@ const ConfigSection: React.FC<{ title: string; children: React.ReactNode }> = ({
     </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onClose, onLogout }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [backupMsg, setBackupMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'general' | 'models' | 'backup'>('general');
@@ -164,6 +163,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
             {/* GENERAL TAB */}
             {activeTab === 'general' && (
                 <div className="space-y-4">
+                     {/* Account Section */}
+                    <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex justify-between items-center mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                                {gameState.userProfile?.nickname?.[0] || 'G'}
+                            </div>
+                            <div>
+                                <p className="text-white font-bold">{gameState.userProfile?.nickname || '访客'}</p>
+                                <p className="text-xs text-gray-400">
+                                    {gameState.userProfile?.isGuest ? '访客身份 (未绑定)' : `已登录 (${gameState.userProfile?.phoneNumber || 'WeChat'})`}
+                                </p>
+                            </div>
+                        </div>
+                        {!gameState.userProfile?.isGuest && (
+                            <Button variant="ghost" onClick={onLogout} className="text-xs text-red-400 hover:bg-red-900/20 hover:text-red-300">
+                                退出登录
+                            </Button>
+                        )}
+                    </div>
+
                     <Toggle 
                         label="自动生成首页形象"
                         description="开启后，进入选择页会自动为角色生成新的AI形象。关闭可节省Token。"

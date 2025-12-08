@@ -5,9 +5,10 @@ interface EntryPointProps {
   onNavigate: (screen: 'realWorld' | 'sceneSelection' | 'admin') => void;
   onOpenSettings: () => void;
   nickname: string;
+  onSwitchToMobile: () => void;
 }
 
-export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettings, nickname }) => {
+export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettings, nickname, onSwitchToMobile }) => {
   return (
     <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-black">
       <div className="absolute inset-0 z-0">
@@ -25,6 +26,20 @@ export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettin
            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
            </svg>
+        </button>
+      </div>
+
+      {/* Switch to Mobile Button */}
+      <div className="absolute top-6 right-24 z-20 mr-2">
+        <button
+          onClick={onSwitchToMobile}
+          className="p-3 text-slate-300 hover:text-white bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full transition-all border border-white/10 hover:border-white/30 shadow-lg hover:scale-105 flex items-center gap-2 px-4"
+          title="切换到手机版"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+          </svg>
+          <span className="text-sm font-bold hidden sm:inline">Mobile</span>
         </button>
       </div>
 

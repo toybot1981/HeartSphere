@@ -115,8 +115,11 @@ export interface AppSettings {
 }
 
 export interface UserProfile {
+  id?: string;
   nickname: string;
   avatarUrl: string;
+  phoneNumber?: string;
+  isGuest: boolean; // True if not logged in/registered
 }
 
 export interface JournalEcho {
@@ -160,7 +163,7 @@ export interface DebugLog {
 }
 
 export interface GameState {
-  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder' | 'connectionSpace' | 'admin';
+  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder' | 'connectionSpace' | 'admin' | 'mobileProfile';
   userProfile: UserProfile | null;
   selectedSceneId: string | null;
   selectedCharacterId: string | null;

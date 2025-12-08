@@ -19,9 +19,14 @@ import { Button } from './components/Button';
 import { DebugConsole } from './components/DebugConsole';
 import { ConnectionSpace } from './components/ConnectionSpace';
 import { AdminScreen } from './admin/AdminScreen';
+import { LoginModal } from './components/LoginModal';
+import { MobileApp } from './mobile/MobileApp';
 
 const App: React.FC = () => {
   
+  // Simple Client-Side Routing Check
+  const [isMobileMode, setIsMobileMode] = useState(false);
+
   const EXAMPLE_SCENARIO: CustomScenario = {
       id: 'example_scenario_01',
       sceneId: 'university_era',
@@ -30,7 +35,7 @@ const App: React.FC = () => {
       author: 'System', startNodeId: 'start',
       nodes: {
           'start': { id: 'start', title: '初入网咖', prompt: 'User enters a cyberpunk internet cafe at rainy night. Introduce a mysterious hacker girl (Yuki style) sitting in the corner, looking nervous. The barista asks for the user\'s order.', options: [ { id: 'opt_1', text: '走向那个黑客少女', nextNodeId: 'node_hacker' }, { id: 'opt_2', text: '点一杯咖啡，坐在吧台', nextNodeId: 'node_coffee' } ] },
-          'node_hacker': { id: 'node_hacker', title: '黑客的求助', prompt: 'The user approaches the hacker girl. She is startled but then asks for help decrypting a drive. The mood is tense and secretive.', options: [ { id: 'opt_help', text: '答应帮助她', nextNodeId: 'node_mission_start' }, { id: 'opt_leave', text: '表示对此不感兴趣，离开', nextNodeId: 'start' } ] },
+          'node_hacker': { id: 'node_hacker', title: '黑客的求助', prompt: 'The girl hands over a data chip. "They are watching," she whispers. Suddenly, the cafe lights turn red. Action scene begins.', options: [ { id: 'opt_help', text: '答应帮助她', nextNodeId: 'node_mission_start' }, { id: 'opt_leave', text: '表示对此不感兴趣，离开', nextNodeId: 'start' } ] },
           'node_coffee': { id: 'node_coffee', title: '平静的夜晚', prompt: 'The user sits at the bar. The barista serves a glowing neon coffee. The atmosphere is chill and lo-fi. Nothing dangerous happens, just a conversation.', options: [ { id: 'opt_chat', text: '和咖啡师聊天', nextNodeId: 'node_coffee' }, { id: 'opt_look_around', text: '观察四周', nextNodeId: 'start' } ] },
           'node_mission_start': { id: 'node_mission_start', title: '任务开始', prompt: 'The girl hands over a data chip. "They are watching," she whispers. Suddenly, the cafe lights turn red. Action scene begins.', options: [] }
       }
@@ -54,33 +59,19 @@ const App: React.FC = () => {
     journalEntries: [],
     activeJournalEntryId: null,
     settings: { 
-      autoGenerateAvatars: false, // Default false to save costs
-      autoGenerateStoryScenes: false, // Default false to save costs
-      autoGenerateJournalImages: false, // Default false to save costs
+      autoGenerateAvatars: false, 
+      autoGenerateStoryScenes: false,
+      autoGenerateJournalImages: false,
       debugMode: false,
-      // Default Routing
       textProvider: 'gemini',
       imageProvider: 'gemini',
       videoProvider: 'gemini',
       audioProvider: 'gemini',
       enableFallback: true,
-      
       geminiConfig: { apiKey: '', modelName: 'gemini-2.5-flash', imageModel: 'gemini-2.5-flash-image', videoModel: 'veo-3.1-fast-generate-preview' },
       openaiConfig: { apiKey: '', baseUrl: 'https://api.openai.com/v1', modelName: 'gpt-4o', imageModel: 'dall-e-3' },
-      qwenConfig: { 
-        apiKey: 'sk-a486b81e29484fcea112b2c010b7bd95', 
-        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', 
-        modelName: 'qwen-max', 
-        imageModel: 'qwen-image-plus',
-        videoModel: 'wanx-video' 
-      },
-      doubaoConfig: { 
-        apiKey: '', 
-        baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', 
-        modelName: 'ep-20240604052345-xxxxx',
-        imageModel: 'doubao-image-v1', // Placeholder
-        videoModel: 'doubao-video-v1' // Placeholder
-      }
+      qwenConfig: { apiKey: 'sk-a486b81e29484fcea112b2c010b7bd95', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', modelName: 'qwen-max', imageModel: 'qwen-image-plus', videoModel: 'wanx-video' },
+      doubaoConfig: { apiKey: '', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', modelName: 'ep-20240604052345-xxxxx', imageModel: 'doubao-image-v1', videoModel: 'doubao-video-v1' }
     },
     mailbox: [],
     lastLoginTime: Date.now(),
@@ -106,28 +97,29 @@ const App: React.FC = () => {
 
   const [profileNickname, setProfileNickname] = useState('');
 
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const pendingActionRef = useRef<() => void>(() => {});
+
   const hasCheckedMail = useRef(false);
 
   // --- PERSISTENCE LOGIC ---
-  useEffect(() => {
-    const init = async () => {
-        const loadedState = await storageService.loadState();
-        if (loadedState) {
+  
+  const loadGameData = async () => {
+      setIsLoaded(false);
+      const loadedState = await storageService.loadState();
+      if (loadedState) {
           const savedSettings = (loadedState.settings || {}) as Partial<AppSettings>;
           
           const mergedSettings: AppSettings = {
               ...DEFAULT_STATE.settings,
               ...savedSettings,
-              // Merge nested configs to ensure new keys exist
               geminiConfig: { ...DEFAULT_STATE.settings.geminiConfig, ...(savedSettings.geminiConfig || {}) },
               openaiConfig: { ...DEFAULT_STATE.settings.openaiConfig, ...(savedSettings.openaiConfig || {}) },
               qwenConfig: { ...DEFAULT_STATE.settings.qwenConfig, ...(savedSettings.qwenConfig || {}) },
               doubaoConfig: { ...DEFAULT_STATE.settings.doubaoConfig, ...(savedSettings.doubaoConfig || {}) },
-              // Ensure boolean flags are preserved if they exist, otherwise default (which is now false)
               autoGenerateAvatars: savedSettings.autoGenerateAvatars ?? DEFAULT_STATE.settings.autoGenerateAvatars,
               autoGenerateStoryScenes: savedSettings.autoGenerateStoryScenes ?? DEFAULT_STATE.settings.autoGenerateStoryScenes,
               autoGenerateJournalImages: savedSettings.autoGenerateJournalImages ?? DEFAULT_STATE.settings.autoGenerateJournalImages,
-              
               textProvider: savedSettings.textProvider || DEFAULT_STATE.settings.textProvider,
               imageProvider: savedSettings.imageProvider || DEFAULT_STATE.settings.imageProvider,
               videoProvider: savedSettings.videoProvider || DEFAULT_STATE.settings.videoProvider,
@@ -152,12 +144,14 @@ const App: React.FC = () => {
           }));
           
           geminiService.updateConfig(mergedSettings);
-        } else {
+      } else {
           geminiService.updateConfig(DEFAULT_STATE.settings);
-        }
-        setIsLoaded(true);
-    };
-    init();
+      }
+      setIsLoaded(true);
+  };
+
+  useEffect(() => {
+    loadGameData();
   }, []);
 
   useEffect(() => {
@@ -173,6 +167,7 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [gameState, isLoaded]);
 
+  // Logging hook
   useEffect(() => {
       geminiService.setLogCallback((log: DebugLog) => {
           setGameState(prev => ({
@@ -182,9 +177,9 @@ const App: React.FC = () => {
       });
   }, []);
 
+  // Mail check
   useEffect(() => {
     if (!isLoaded || !gameState.userProfile || hasCheckedMail.current) return;
-
     const checkMail = async () => {
         hasCheckedMail.current = true;
         const now = Date.now();
@@ -194,7 +189,6 @@ const App: React.FC = () => {
         if (offlineDuration > THRESHOLD) {
             const chattedCharIds = Object.keys(gameState.history);
             let candidate: Character | null = null;
-            
             if (chattedCharIds.length > 0) {
                  const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
                  for (const scene of allScenes) {
@@ -203,10 +197,7 @@ const App: React.FC = () => {
                      if (found) { candidate = found; break; }
                  }
             }
-            
-            if (!candidate) {
-                candidate = WORLD_SCENES[0].characters[0]; 
-            }
+            if (!candidate) candidate = WORLD_SCENES[0].characters[0]; 
 
             if (candidate) {
                  const letter = await geminiService.generateChronosLetter(candidate, gameState.userProfile!, gameState.journalEntries);
@@ -222,10 +213,7 @@ const App: React.FC = () => {
                          isRead: false,
                          themeColor: candidate.themeColor
                      };
-                     setGameState(prev => ({
-                         ...prev,
-                         mailbox: [newMail, ...prev.mailbox]
-                     }));
+                     setGameState(prev => ({ ...prev, mailbox: [newMail, ...prev.mailbox] }));
                  }
             }
         }
@@ -234,11 +222,69 @@ const App: React.FC = () => {
   }, [isLoaded, gameState.userProfile]);
 
 
+  // --- AUTH HELPER ---
+  
+  const requireAuth = (action: () => void) => {
+    if (gameState.userProfile?.isGuest) {
+      pendingActionRef.current = action;
+      setShowLoginModal(true);
+    } else {
+      action();
+    }
+  };
+
+  const handleLoginSuccess = (method: 'phone' | 'wechat', identifier: string) => {
+    setGameState(prev => ({
+      ...prev,
+      userProfile: prev.userProfile ? {
+        ...prev.userProfile,
+        isGuest: false,
+        id: identifier, 
+        phoneNumber: method === 'phone' ? identifier : undefined,
+      } : null
+    }));
+    setShowLoginModal(false);
+    
+    if (pendingActionRef.current) {
+      pendingActionRef.current();
+      pendingActionRef.current = () => {};
+    }
+  };
+
+  const handleLogout = () => {
+    if (window.confirm("确定要退出登录吗？")) {
+        setGameState(prev => ({
+            ...prev,
+            userProfile: null,
+            currentScreen: 'profileSetup'
+        }));
+        setShowSettingsModal(false);
+    }
+  };
+
+
   // --- HANDLERS ---
+
+  const handleSwitchToMobile = async () => {
+    // Save PC state before switching
+    await storageService.saveState({ ...gameState, lastLoginTime: Date.now() });
+    setIsMobileMode(true);
+  };
+
+  const handleSwitchToPC = () => {
+    setIsMobileMode(false);
+    // Reload data to pick up changes from mobile
+    loadGameData();
+  };
 
   const handleProfileSubmit = () => {
     if(!profileNickname.trim()) return;
-    const profile = { nickname: profileNickname, avatarUrl: '' }; 
+    const profile = { 
+        nickname: profileNickname, 
+        avatarUrl: '',
+        isGuest: true, 
+        id: `guest_${Date.now()}`
+    }; 
     setGameState(prev => ({
         ...prev,
         userProfile: profile,
@@ -254,15 +300,10 @@ const App: React.FC = () => {
     setGameState(prev => ({ ...prev, currentScreen: 'realWorld' }));
   };
 
-  const handleEnterHeartSphere = () => {
-    setGameState(prev => ({ ...prev, currentScreen: 'sceneSelection' }));
-  };
-
   const handleSceneSelect = (sceneId: string) => {
     setGameState(prev => ({ 
         ...prev, 
         selectedSceneId: sceneId, 
-        // Important: Clear character/scenario selection when changing scene
         selectedCharacterId: null,
         tempStoryCharacter: null,
         selectedScenarioId: null,
@@ -288,7 +329,7 @@ const App: React.FC = () => {
                 },
                 selectedCharacterId: character.id,
                 tempStoryCharacter: null,
-                selectedScenarioId: null, // Clear any scenario flags
+                selectedScenarioId: null, 
                 currentScreen: 'chat'
              }));
              return;
@@ -299,7 +340,7 @@ const App: React.FC = () => {
         ...prev, 
         selectedCharacterId: character.id, 
         tempStoryCharacter: null, 
-        selectedScenarioId: null, // Explicitly clear Scenario ID
+        selectedScenarioId: null, 
         currentScenarioState: undefined,
         currentScreen: 'chat' 
     }));
@@ -351,7 +392,7 @@ const App: React.FC = () => {
             ...prev, 
             selectedCharacterId: null, 
             tempStoryCharacter: null, 
-            selectedScenarioId: null, // Ensure scenario ID is cleared on back
+            selectedScenarioId: null, 
             currentScenarioState: undefined,
             currentScreen: 'characterSelection' 
         }));
@@ -412,7 +453,6 @@ const App: React.FC = () => {
           setGameState(prev => ({
               ...prev,
               customScenes: prev.customScenes.filter(s => s.id !== sceneId),
-              // Also clean up custom characters for this scene
               customCharacters: Object.fromEntries(
                  Object.entries(prev.customCharacters).filter(([id]) => id !== sceneId)
               )
@@ -458,7 +498,6 @@ const App: React.FC = () => {
   const handleSaveScenario = (scenario: CustomScenario) => {
     if (!gameState.selectedSceneId && !gameState.editingScenarioId) return;
     
-    // Use existing scene ID if editing, or current selected if new
     const sceneId = gameState.selectedSceneId || gameState.customScenarios.find(s => s.id === scenario.id)?.sceneId;
     if (!sceneId) return;
 
@@ -475,7 +514,7 @@ const App: React.FC = () => {
         return {
             ...prev,
             customScenarios: newScenarios,
-            currentScreen: prev.currentScreen === 'builder' ? 'characterSelection' : prev.currentScreen, // Return to previous screen
+            currentScreen: prev.currentScreen === 'builder' ? 'characterSelection' : prev.currentScreen, 
             editingScenarioId: null
         };
     });
@@ -576,6 +615,17 @@ const App: React.FC = () => {
       }));
   };
 
+  const handleConsultMirror = async (content: string, recentContext: string[]): Promise<string | null> => {
+      if (gameState.userProfile?.isGuest) {
+          requireAuth(() => {
+              alert("登录成功！请再次点击“本我镜像”以开始分析。");
+          });
+          return null;
+      }
+      
+      return geminiService.generateMirrorInsight(content, recentContext);
+  };
+
   const handleMarkMailRead = (mailId: string) => {
       setGameState(prev => ({
           ...prev,
@@ -624,15 +674,12 @@ const App: React.FC = () => {
       setShowEraMemory(true);
   };
   
-  // --- HELPERS FOR ADMIN/EDITING ---
-  
   const launchEditCharacter = (char: Character, sceneId: string) => {
       setEditingCharacter(char);
       setEditingCharacterSceneId(sceneId);
       setShowCharacterCreator(true);
   };
 
-  // We need to construct the current scene object for the character creator
   const getEditingCharacterScene = () => {
       if (gameState.selectedSceneId) {
           return [...WORLD_SCENES, ...gameState.customScenes].find(s => s.id === gameState.selectedSceneId) || WORLD_SCENES[0];
@@ -643,39 +690,47 @@ const App: React.FC = () => {
       return WORLD_SCENES[0];
   };
 
+  if (isMobileMode) {
+      return <MobileApp onSwitchToPC={handleSwitchToPC} />;
+  }
 
   if (!isLoaded) return <div className="h-screen w-screen bg-black flex items-center justify-center text-white">Loading HeartSphere Core...</div>;
 
-  const currentScene = [...WORLD_SCENES, ...gameState.customScenes].find(s => s.id === gameState.selectedSceneId);
+  const currentSceneLocal = [...WORLD_SCENES, ...gameState.customScenes].find(s => s.id === gameState.selectedSceneId);
   
-  // Combine built-in characters with custom characters for this scene
   let sceneCharacters: Character[] = [];
-  if (currentScene) {
-      const customCharsForScene = gameState.customCharacters[currentScene.id] || [];
-      sceneCharacters = [...currentScene.characters, ...customCharsForScene];
+  if (currentSceneLocal) {
+      const customCharsForScene = gameState.customCharacters[currentSceneLocal.id] || [];
+      sceneCharacters = [...currentSceneLocal.characters, ...customCharsForScene];
   }
 
-  // Aggregate all characters for Connection Space
   const allCharacters = [...WORLD_SCENES, ...gameState.customScenes].reduce((acc, scene) => {
       const sceneChars = [...scene.characters, ...(gameState.customCharacters[scene.id] || [])];
       return [...acc, ...sceneChars];
   }, [] as Character[]);
 
-  let currentCharacter = gameState.tempStoryCharacter || sceneCharacters.find(c => c.id === gameState.selectedCharacterId);
-  if (!currentCharacter && currentScene?.mainStory?.id === gameState.selectedCharacterId) {
-      currentCharacter = currentScene.mainStory;
+  let currentCharacterLocal = gameState.tempStoryCharacter || sceneCharacters.find(c => c.id === gameState.selectedCharacterId);
+  if (!currentCharacterLocal && currentSceneLocal?.mainStory?.id === gameState.selectedCharacterId) {
+      currentCharacterLocal = currentSceneLocal.mainStory;
   }
 
-  const editingScenario = gameState.editingScenarioId 
+  const editingScenarioLocal = gameState.editingScenarioId 
     ? gameState.customScenarios.find(s => s.id === gameState.editingScenarioId) 
     : null;
-  const currentScenario = gameState.selectedScenarioId
+  const currentScenarioLocal = gameState.selectedScenarioId
     ? gameState.customScenarios.find(s => s.id === gameState.selectedScenarioId)
     : null;
 
   return (
     <div className="relative h-screen w-screen bg-black overflow-hidden font-sans text-white">
       
+      {showLoginModal && (
+          <LoginModal 
+             onLoginSuccess={handleLoginSuccess}
+             onCancel={() => { setShowLoginModal(false); pendingActionRef.current = () => {}; }}
+          />
+      )}
+
       {gameState.currentScreen === 'profileSetup' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 p-6">
            <div className="max-w-md w-full text-center space-y-8">
@@ -688,7 +743,8 @@ const App: React.FC = () => {
                  placeholder="输入你的昵称"
                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-center text-lg focus:border-pink-500 outline-none"
                />
-               <Button fullWidth onClick={handleProfileSubmit} disabled={!profileNickname.trim()}>进入世界</Button>
+               <Button fullWidth onClick={handleProfileSubmit} disabled={!profileNickname.trim()}>以访客身份进入</Button>
+               <p className="text-xs text-gray-600 mt-4">你可以在之后绑定手机或微信以保存数据。</p>
            </div>
         </div>
       )}
@@ -698,6 +754,7 @@ const App: React.FC = () => {
             onNavigate={(screen) => setGameState(prev => ({ ...prev, currentScreen: screen }))} 
             nickname={gameState.userProfile.nickname} 
             onOpenSettings={() => setShowSettingsModal(true)}
+            onSwitchToMobile={handleSwitchToMobile}
           />
       )}
 
@@ -710,6 +767,7 @@ const App: React.FC = () => {
              onExplore={handleExploreWithEntry}
              onChatWithCharacter={handleChatWithCharacterByName}
              onBack={handleEnterNexus}
+             onConsultMirror={handleConsultMirror} 
              autoGenerateImage={gameState.settings.autoGenerateJournalImages}
           />
       )}
@@ -720,24 +778,25 @@ const App: React.FC = () => {
              userProfile={gameState.userProfile}
              onBack={() => setGameState(prev => ({ ...prev, currentScreen: 'sceneSelection' }))}
              onConnect={(character) => {
-                 // Find which scene this character belongs to
-                 const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
-                 let sceneId: string | null = null;
-                 for (const s of allScenes) {
-                     const chars = [...s.characters, ...(gameState.customCharacters[s.id] || [])];
-                     if (chars.find(c => c.id === character.id)) {
-                         sceneId = s.id;
-                         break;
+                 requireAuth(() => {
+                     const allScenes = [...WORLD_SCENES, ...gameState.customScenes];
+                     let sceneId: string | null = null;
+                     for (const s of allScenes) {
+                         const chars = [...s.characters, ...(gameState.customCharacters[s.id] || [])];
+                         if (chars.find(c => c.id === character.id)) {
+                             sceneId = s.id;
+                             break;
+                         }
                      }
-                 }
-                 if (sceneId) {
-                     setGameState(prev => ({
-                         ...prev,
-                         selectedSceneId: sceneId,
-                         selectedCharacterId: character.id,
-                         currentScreen: 'chat'
-                     }));
-                 }
+                     if (sceneId) {
+                         setGameState(prev => ({
+                             ...prev,
+                             selectedSceneId: sceneId,
+                             selectedCharacterId: character.id,
+                             currentScreen: 'chat'
+                         }));
+                     }
+                 });
              }}
           />
       )}
@@ -760,12 +819,14 @@ const App: React.FC = () => {
                   </Button>
                   <div>
                     <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">{APP_TITLE}</h2>
-                    <p className="text-gray-400 text-sm">选择一个时代切片进行连接</p>
+                    <p className="text-gray-400 text-sm flex items-center gap-2">
+                        选择一个时代切片进行连接
+                        {gameState.userProfile?.isGuest && <span className="text-[10px] bg-gray-700 px-1 rounded text-gray-300">GUEST MODE</span>}
+                    </p>
                   </div>
               </div>
               
               <div className="flex items-center gap-3">
-                  {/* Connection Space Button */}
                   <button
                     onClick={() => setGameState(prev => ({ ...prev, currentScreen: 'connectionSpace' }))}
                     className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-900 to-indigo-900 border border-blue-500/30 text-blue-200 hover:text-white hover:border-blue-400 transition-all shadow-lg hover:shadow-blue-500/20"
@@ -782,7 +843,12 @@ const App: React.FC = () => {
                           <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-bounce" />
                       )}
                   </button>
-                  <Button onClick={() => { setEditingScene(null); setShowEraCreator(true); }} className="text-sm bg-pink-600 hover:bg-pink-500">
+                  <Button onClick={() => { 
+                      requireAuth(() => {
+                        setEditingScene(null); 
+                        setShowEraCreator(true); 
+                      });
+                  }} className="text-sm bg-pink-600 hover:bg-pink-500">
                      + 创造新时代
                   </Button>
               </div>
@@ -815,7 +881,13 @@ const App: React.FC = () => {
                         {isCustom && (
                             <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none group-hover:pointer-events-auto">
                                 <button 
-                                onClick={(e) => { e.stopPropagation(); setEditingScene(scene); setShowEraCreator(true); }}
+                                onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    requireAuth(() => {
+                                        setEditingScene(scene); 
+                                        setShowEraCreator(true);
+                                    });
+                                }}
                                 className="relative p-2 bg-black/60 rounded-full hover:bg-white/20 border border-white/20 text-white z-40 pointer-events-auto"
                                 title="编辑时代"
                                 >
@@ -844,41 +916,47 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {gameState.currentScreen === 'characterSelection' && currentScene && (
+      {gameState.currentScreen === 'characterSelection' && currentSceneLocal && (
          <div className="h-full flex flex-col p-8 bg-gray-900">
              <div className="flex justify-between items-center mb-6">
                  <div className="flex items-center gap-4">
                      <Button variant="ghost" onClick={() => setGameState(prev => ({...prev, currentScreen: 'sceneSelection'}))} className="!p-2">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                      </Button>
-                     <h2 className="text-3xl font-bold text-white">{currentScene.name}</h2>
+                     <h2 className="text-3xl font-bold text-white">{currentSceneLocal.name}</h2>
                  </div>
                  <div className="flex gap-2">
-                     <Button onClick={() => { setEditingCharacter(null); setEditingCharacterSceneId(currentScene.id); setShowCharacterCreator(true); }} className="text-sm">
+                     <Button onClick={() => { 
+                         requireAuth(() => {
+                            setEditingCharacter(null); 
+                            setEditingCharacterSceneId(currentSceneLocal.id); 
+                            setShowCharacterCreator(true);
+                         });
+                     }} className="text-sm">
                         + 新增角色
                      </Button>
                  </div>
              </div>
              
              <div className="flex-1 overflow-y-auto pr-4 custom-scrollbar">
-                {currentScene.mainStory && (
+                {currentSceneLocal.mainStory && (
                     <div className="mb-10 p-1 rounded-3xl bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500">
                         <div className="bg-gray-900 rounded-[22px] overflow-hidden relative group">
-                             <div className="absolute inset-0 bg-cover bg-center opacity-40 transition-transform duration-1000 group-hover:scale-105" style={{backgroundImage: `url(${currentScene.mainStory.backgroundUrl})`}} />
+                             <div className="absolute inset-0 bg-cover bg-center opacity-40 transition-transform duration-1000 group-hover:scale-105" style={{backgroundImage: `url(${currentSceneLocal.mainStory.backgroundUrl})`}} />
                              <div className="relative p-8 md:p-12 flex flex-col md:flex-row items-center gap-8">
                                  <div className="flex-1 space-y-4">
                                      <div className="inline-block px-3 py-1 bg-pink-500 text-white text-xs font-bold rounded-full">主线剧情</div>
-                                     <h3 className="text-3xl font-bold text-white">{currentScene.mainStory.name}</h3>
-                                     <p className="text-gray-300 leading-relaxed">{currentScene.mainStory.bio}</p>
+                                     <h3 className="text-3xl font-bold text-white">{currentSceneLocal.mainStory.name}</h3>
+                                     <p className="text-gray-300 leading-relaxed">{currentSceneLocal.mainStory.bio}</p>
                                      <Button 
-                                       onClick={() => handleCharacterSelect(currentScene.mainStory!)}
+                                       onClick={() => handleCharacterSelect(currentSceneLocal.mainStory!)}
                                        className="bg-white text-black hover:bg-gray-200 mt-4 px-8"
                                      >
                                          开始故事
                                      </Button>
                                  </div>
                                  <div className="w-48 h-64 shrink-0 rounded-xl overflow-hidden shadow-2xl border-4 border-white/10 rotate-3 transition-transform group-hover:rotate-0">
-                                     <img src={currentScene.mainStory.avatarUrl} className="w-full h-full object-cover" alt="Story Cover" />
+                                     <img src={currentSceneLocal.mainStory.avatarUrl} className="w-full h-full object-cover" alt="Story Cover" />
                                  </div>
                              </div>
                         </div>
@@ -894,7 +972,7 @@ const App: React.FC = () => {
                           customAvatarUrl={gameState.customAvatars[char.id]}
                           isGenerating={gameState.generatingAvatarId === char.id}
                           onSelect={handleCharacterSelect}
-                          onGenerate={handleGenerateAvatar}
+                          onGenerate={(c) => requireAuth(() => handleGenerateAvatar(c))}
                         />
                     ))}
                 </div>
@@ -902,12 +980,17 @@ const App: React.FC = () => {
                  <div className="mt-12 mb-20">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-bold text-gray-400">剧本分支</h3>
-                        <Button onClick={() => { setEditingScene(null); setGameState(prev => ({...prev, currentScreen: 'builder'})); }} variant="secondary" className="text-xs">
+                        <Button onClick={() => { 
+                             requireAuth(() => {
+                                setEditingScene(null); 
+                                setGameState(prev => ({...prev, currentScreen: 'builder'})); 
+                             });
+                        }} variant="secondary" className="text-xs">
                             + 创建剧本
                         </Button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {gameState.customScenarios.filter(s => s.sceneId === currentScene.id).map(scenario => (
+                        {gameState.customScenarios.filter(s => s.sceneId === currentSceneLocal.id).map(scenario => (
                             <div key={scenario.id} className="group relative bg-gray-800 rounded-2xl p-6 border border-gray-700 hover:border-indigo-500 transition-all cursor-pointer hover:-translate-y-1" onClick={() => handlePlayScenario(scenario)}>
                                 <h4 className="text-lg font-bold text-white mb-2 group-hover:text-indigo-400">{scenario.title}</h4>
                                 <p className="text-sm text-gray-400 line-clamp-3 mb-4">{scenario.description}</p>
@@ -916,7 +999,7 @@ const App: React.FC = () => {
                                     <span>{Object.keys(scenario.nodes).length} 个节点</span>
                                 </div>
                                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-2">
-                                     <button onClick={(e) => handleEditScenario(scenario, e)} className="p-1.5 hover:bg-white/10 rounded text-gray-300 pointer-events-auto" title="编辑">
+                                     <button onClick={(e) => { requireAuth(() => handleEditScenario(scenario, e)) }} className="p-1.5 hover:bg-white/10 rounded text-gray-300 pointer-events-auto" title="编辑">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>
                                      </button>
                                      <button onClick={(e) => handleDeleteScenario(scenario.id, e)} className="p-1.5 hover:bg-red-900/50 rounded text-gray-300 hover:text-red-400 pointer-events-auto" title="删除">
@@ -931,11 +1014,11 @@ const App: React.FC = () => {
          </div>
       )}
 
-      {gameState.currentScreen === 'chat' && currentCharacter && (
+      {gameState.currentScreen === 'chat' && currentCharacterLocal && (
         <ChatWindow 
-          character={currentCharacter} 
-          customScenario={currentScenario || undefined}
-          history={gameState.history[currentCharacter.id] || []}
+          character={currentCharacterLocal} 
+          customScenario={currentScenarioLocal || undefined}
+          history={gameState.history[currentCharacterLocal.id] || []}
           scenarioState={gameState.currentScenarioState}
           settings={gameState.settings}
           userProfile={gameState.userProfile!}
@@ -948,7 +1031,7 @@ const App: React.FC = () => {
 
       {gameState.currentScreen === 'builder' && (
           <ScenarioBuilder 
-            initialScenario={editingScenario}
+            initialScenario={editingScenarioLocal}
             onSave={handleSaveScenario}
             onCancel={() => setGameState(prev => ({...prev, currentScreen: 'characterSelection', editingScenarioId: null}))}
           />
@@ -960,6 +1043,7 @@ const App: React.FC = () => {
           gameState={gameState}
           onSettingsChange={(newSettings) => setGameState(prev => ({ ...prev, settings: newSettings }))}
           onClose={() => setShowSettingsModal(false)} 
+          onLogout={handleLogout}
         />
       )}
 
