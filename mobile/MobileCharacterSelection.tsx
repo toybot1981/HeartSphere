@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { WorldScene, Character, CustomScenario } from '../types';
 
@@ -25,7 +24,7 @@ export const MobileCharacterSelection: React.FC<MobileCharacterSelectionProps> =
                 
                 <button 
                     onClick={onBack}
-                    className="absolute top-4 left-4 p-2 bg-black/40 backdrop-blur-md rounded-full text-white border border-white/10 z-20"
+                    className="absolute top-[calc(1rem+env(safe-area-inset-top))] left-4 p-2 bg-black/40 backdrop-blur-md rounded-full text-white border border-white/10 z-20 active:scale-95 transition-transform"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>

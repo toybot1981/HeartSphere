@@ -1,5 +1,4 @@
 
-
 // This file includes legacy types like 'Persona' to prevent errors in unused components,
 // but the main application logic relies on the 'WorldScene' architecture.
 export interface Persona {

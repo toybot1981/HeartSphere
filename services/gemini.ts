@@ -886,17 +886,29 @@ export class GeminiService {
       return this.generateText(`${prompt}\n\nCONVERSATION:\n${context}`);
   }
 
+  // --- NEW: Mirror Insight ---
   async generateMirrorInsight(journalContent: string, pastEntries: string[]): Promise<string | null> {
-      const prompt = `You are the "Mirror of Truth" (本我镜像). Analyze the user's journal entry and past patterns. 
-      Provide a sharp, psychological insight about their subconscious desires, fears, or hidden strengths. 
-      Be objective, slightly mysterious, but supportive. Max 50 words.
+      const prompt = `You are the "Mirror of Truth" (本我镜像). Analyze the user's journal entry and their past patterns (if any).
+      Your goal is to provide a sharp, psychological insight about their subconscious desires, fears, or hidden strengths.
+      
+      Style Guidelines:
+      - Be objective but supportive.
+      - Be slightly mysterious, like a tarot reading or a Jungian analysis.
+      - Keep it under 50 words.
+      - Speak in Chinese.
       `;
-      const context = `CURRENT ENTRY: ${journalContent}\n\nPAST ENTRIES:\n${pastEntries.join('\n')}`;
-      return this.generateText(`${prompt}\n\nCONTEXT:\n${context}`);
+      const context = `CURRENT ENTRY: ${journalContent}\n\nPAST ENTRIES CONTEXT:\n${pastEntries.join('\n')}`;
+      
+      try {
+          return await this.generateText(`${prompt}\n\nCONTEXT:\n${context}`);
+      } catch (e) {
+          console.error("Mirror insight failed", e);
+          return null;
+      }
   }
 
   async generateMoodImage(text: string): Promise<string | null> {
-      const prompt = `Abstract, artistic, high-quality illustration representing this emotion/thought: "${text}". Style: Ethereal, Dreamlike, Digital Art.`;
+      const prompt = `Abstract, artistic, high-quality illustration representing this emotion/thought: "${text}". Style: Ethereal, Dreamlike, Digital Art, vibrant colors, expressive brushstrokes.`;
       return this.generateImageFromPrompt(prompt, '16:9');
   }
 

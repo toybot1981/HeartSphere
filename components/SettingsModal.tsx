@@ -10,6 +10,7 @@ interface SettingsModalProps {
   onSettingsChange: (newSettings: AppSettings) => void;
   onClose: () => void;
   onLogout: () => void;
+  onBindAccount: () => void;
 }
 
 const Toggle: React.FC<{ label: string; description: string; enabled: boolean; onChange: (enabled: boolean) => void; }> = ({ label, description, enabled, onChange }) => (
@@ -46,7 +47,7 @@ const ConfigSection: React.FC<{ title: string; children: React.ReactNode }> = ({
     </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onClose, onLogout }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onClose, onLogout, onBindAccount }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [backupMsg, setBackupMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'general' | 'models' | 'backup'>('general');
@@ -176,11 +177,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                                 </p>
                             </div>
                         </div>
-                        {!gameState.userProfile?.isGuest && (
-                            <Button variant="ghost" onClick={onLogout} className="text-xs text-red-400 hover:bg-red-900/20 hover:text-red-300">
+                        <div className="flex gap-2">
+                             {gameState.userProfile?.isGuest && (
+                                <Button variant="ghost" onClick={onBindAccount} className="text-xs text-pink-400 hover:bg-pink-900/20 hover:text-pink-300 border border-pink-500/30">
+                                    绑定账号
+                                </Button>
+                             )}
+                             <Button variant="ghost" onClick={onLogout} className="text-xs text-red-400 hover:bg-red-900/20 hover:text-red-300">
                                 退出登录
-                            </Button>
-                        )}
+                             </Button>
+                        </div>
                     </div>
 
                     <Toggle 

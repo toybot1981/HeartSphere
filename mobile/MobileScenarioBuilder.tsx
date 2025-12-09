@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { CustomScenario, StoryNode, StoryOption } from '../types';
 import { Button } from '../components/Button';
@@ -54,7 +53,7 @@ export const MobileScenarioBuilder: React.FC<MobileScenarioBuilderProps> = ({ in
   const updateOption = (nodeId: string, optIdx: number, field: keyof StoryOption, value: string) => {
     const node = nodes[nodeId];
     const newOpts = [...node.options];
-    newOpts[optIdx] = { ...newOpts[optIdx], [field]: value };
+    newOpts.splice(optIdx, 1);
     updateNode(nodeId, 'options', newOpts);
   };
 
@@ -125,7 +124,7 @@ export const MobileScenarioBuilder: React.FC<MobileScenarioBuilderProps> = ({ in
 
       return (
           <div className="absolute inset-0 z-20 bg-slate-900 flex flex-col animate-fade-in">
-              <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 backdrop-blur-md">
+              <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] border-b border-slate-800 flex items-center justify-between bg-slate-900/90 backdrop-blur-md">
                   <button onClick={() => setEditingNodeId(null)} className="text-slate-400 flex items-center gap-1">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" /></svg>
                       返回
@@ -202,7 +201,7 @@ export const MobileScenarioBuilder: React.FC<MobileScenarioBuilderProps> = ({ in
     <div className="h-full bg-black text-white flex flex-col relative overflow-hidden">
       
       {/* Header */}
-      <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/80 backdrop-blur-md z-10">
+      <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] border-b border-white/10 flex justify-between items-center bg-black/80 backdrop-blur-md z-10">
           <button onClick={onCancel} className="text-slate-400">取消</button>
           <h2 className="font-bold text-lg">剧本编辑器</h2>
           <button onClick={handleSave} className="text-pink-500 font-bold">保存</button>

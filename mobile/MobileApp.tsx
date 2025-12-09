@@ -74,6 +74,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
     const [showEraCreator, setShowEraCreator] = useState(false);
     const [showCharacterCreator, setShowCharacterCreator] = useState(false);
     const [showScenarioBuilder, setShowScenarioBuilder] = useState(false);
+    const [showLoginModal, setShowLoginModal] = useState(false);
 
     // --- INIT & STORAGE ---
     useEffect(() => {
@@ -109,6 +110,45 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
             userProfile: { nickname: profileNickname, avatarUrl: '', isGuest: true, id: `guest_${Date.now()}` },
             currentScreen: 'realWorld'
         }));
+    };
+
+    const handleLogout = () => {
+        // Construct a clean state but preserve settings (API keys etc)
+        const cleanState: GameState = {
+            ...DEFAULT_STATE,
+            settings: gameState.settings, 
+            currentScreen: 'profileSetup',
+            userProfile: null
+        };
+
+        // 1. Update React State immediately to show login screen
+        setShowSettings(false);
+        setGameState(cleanState);
+
+        // 2. Persist the clean state asynchronously (Fire and forget)
+        storageService.saveState(cleanState).then(() => {
+            console.log("Logged out and state saved.");
+        }).catch(err => {
+            console.error("Logout save failed", err);
+        });
+    };
+
+    const handleLoginSuccess = (method: 'phone' | 'wechat', identifier: string) => {
+        setGameState(prev => {
+            // Use existing profile if available (binding), or create new if somehow null
+            const baseProfile = prev.userProfile || { nickname: 'User', avatarUrl: '', isGuest: true, id: '' };
+            
+            return {
+                ...prev,
+                userProfile: {
+                    ...baseProfile,
+                    isGuest: false,
+                    id: identifier,
+                    phoneNumber: method === 'phone' ? identifier : undefined
+                }
+            };
+        });
+        setShowLoginModal(false);
     };
 
     // --- SCENE & CHAR LOGIC ---
@@ -325,11 +365,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                         mailbox={gameState.mailbox}
                         history={gameState.history}
                         onOpenSettings={() => setShowSettings(true)}
-                        onLogout={() => {
-                            if(confirm("确定退出登录吗？")) {
-                                setGameState(prev => ({...DEFAULT_STATE}));
-                            }
-                        }}
+                        onLogout={handleLogout}
                     />
                 )}
 
@@ -358,7 +394,15 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                     gameState={gameState}
                     onSettingsChange={s => setGameState(prev => ({...prev, settings: s}))}
                     onClose={() => setShowSettings(false)}
-                    onLogout={() => { if(confirm("退出?")) setGameState({...DEFAULT_STATE}); }}
+                    onLogout={handleLogout}
+                    onBindAccount={() => { setShowSettings(false); setShowLoginModal(true); }}
+                />
+            )}
+            
+            {showLoginModal && (
+                <LoginModal
+                    onLoginSuccess={handleLoginSuccess}
+                    onCancel={() => setShowLoginModal(false)}
                 />
             )}
             

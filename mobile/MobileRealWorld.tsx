@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { JournalEntry } from '../types';
 import { Button } from '../components/Button';
@@ -81,7 +80,7 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
   // --- LIST VIEW ---
   if (view === 'list') {
       return (
-          <div className="h-full bg-slate-950 p-4 pb-20 overflow-y-auto">
+          <div className="h-full bg-slate-950 p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-24 overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                   <div>
                       <div className="flex items-center gap-3">
@@ -118,8 +117,8 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
   // --- DETAIL VIEW ---
   if (view === 'detail' && selectedEntry) {
       return (
-          <div className="h-full bg-slate-950 flex flex-col pb-20">
-              <div className="p-4 flex items-center gap-4 border-b border-slate-800">
+          <div className="h-full bg-slate-950 flex flex-col pb-24">
+              <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center gap-4 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md sticky top-0 z-10">
                   <button onClick={() => setView('list')} className="text-slate-400">&larr;</button>
                   <h2 className="text-white font-bold truncate flex-1">{selectedEntry.title}</h2>
                   <button onClick={startEdit} className="text-indigo-400 text-sm">编辑</button>
@@ -151,7 +150,7 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
   // --- EDIT VIEW ---
   return (
       <div className="h-full bg-slate-950 flex flex-col pb-20">
-           <div className="p-4 flex items-center justify-between border-b border-slate-800">
+           <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center justify-between border-b border-slate-800 bg-slate-950/90 backdrop-blur-md sticky top-0 z-10">
                 <button onClick={() => setView(selectedEntry ? 'detail' : 'list')} className="text-slate-400">取消</button>
                 <h2 className="text-white font-bold">{selectedEntry ? '编辑' : '新建'}</h2>
                 <button onClick={handleSave} disabled={isGenerating} className="text-pink-500 font-bold disabled:opacity-50">

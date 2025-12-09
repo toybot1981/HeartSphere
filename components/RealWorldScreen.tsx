@@ -1,8 +1,4 @@
 
-
-
-
-
 import React, { useState } from 'react';
 import { JournalEntry } from '../types';
 import { Button } from './Button';

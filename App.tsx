@@ -80,7 +80,7 @@ const App: React.FC = () => {
       geminiConfig: { apiKey: '', modelName: 'gemini-2.5-flash', imageModel: 'gemini-2.5-flash-image', videoModel: 'veo-3.1-fast-generate-preview' },
       openaiConfig: { apiKey: '', baseUrl: 'https://api.openai.com/v1', modelName: 'gpt-4o', imageModel: 'dall-e-3' },
       qwenConfig: { apiKey: 'sk-a486b81e29484fcea112b2c010b7bd95', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', modelName: 'qwen-max', imageModel: 'qwen-image-plus', videoModel: 'wanx-video' },
-      doubaoConfig: { apiKey: '', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', modelName: 'ep-20240604052345-xxxxx', imageModel: 'doubao-image-v1', videoModel: 'doubao-video-v1' }
+      doubaoConfig: { apiKey: '', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', modelName: 'ep-...', imageModel: 'doubao-image-v1', videoModel: 'doubao-video-v1' }
     },
     mailbox: [],
     lastLoginTime: Date.now(),
@@ -298,14 +298,18 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    if (window.confirm("确定要退出登录吗？")) {
-        setGameState(prev => ({
-            ...prev,
-            userProfile: null,
-            currentScreen: 'profileSetup'
-        }));
-        setShowSettingsModal(false);
-    }
+    const nextState: GameState = {
+        ...gameState,
+        userProfile: null,
+        currentScreen: 'profileSetup'
+    };
+    
+    // Update UI immediately
+    setGameState(nextState);
+    setShowSettingsModal(false);
+    
+    // Force immediate save to override any debounced saves
+    storageService.saveState(nextState).catch(console.error);
   };
 
 
@@ -1103,6 +1107,7 @@ const App: React.FC = () => {
           onSettingsChange={(newSettings) => setGameState(prev => ({ ...prev, settings: newSettings }))}
           onClose={() => setShowSettingsModal(false)} 
           onLogout={handleLogout}
+          onBindAccount={() => { setShowSettingsModal(false); setShowLoginModal(true); }}
         />
       )}
 

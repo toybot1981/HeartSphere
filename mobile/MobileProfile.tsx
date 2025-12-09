@@ -23,9 +23,9 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   const unreadMailCount = mailbox.filter(m => !m.isRead).length;
 
   return (
-    <div className="h-full bg-black pb-20 overflow-y-auto">
+    <div className="h-full bg-black pb-32 overflow-y-auto">
       {/* Header Profile Card */}
-      <div className="p-6 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-900/40 rounded-b-3xl shadow-2xl border-b border-white/5">
+      <div className="p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-900/40 rounded-b-3xl shadow-2xl border-b border-white/5">
         <div className="flex items-center gap-4 mb-6">
           <div className="w-20 h-20 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 p-[2px]">
              <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
@@ -97,12 +97,19 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
             </button>
         </div>
 
-        <div className="pt-6">
-            <button onClick={onLogout} className="w-full py-4 text-red-500/80 font-bold text-sm bg-red-900/10 rounded-xl border border-red-900/20 hover:bg-red-900/20 hover:text-red-400 active:scale-95 transition-all">
+        <div className="pt-6 relative z-50">
+            <button 
+                onClick={(e) => {
+                    e.stopPropagation();
+                    console.log("Logout clicked");
+                    onLogout();
+                }} 
+                className="w-full py-4 text-red-500/80 font-bold text-sm bg-red-900/10 rounded-xl border border-red-900/20 hover:bg-red-900/20 hover:text-red-400 active:scale-95 transition-all cursor-pointer"
+            >
                 退出登录
             </button>
             <p className="text-center text-[10px] text-gray-700 mt-4">
-                HeartSphere Mobile v1.0.0
+                HeartSphere Mobile v1.0.2
             </p>
         </div>
       </div>

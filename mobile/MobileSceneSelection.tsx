@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { WorldScene } from '../types';
 
@@ -11,7 +10,7 @@ interface MobileSceneSelectionProps {
 export const MobileSceneSelection: React.FC<MobileSceneSelectionProps> = ({ scenes, onSelectScene, onCreateScene }) => {
     return (
         <div className="h-full bg-black pb-20 overflow-y-auto">
-            <div className="p-4 sticky top-0 bg-black/80 backdrop-blur-md z-10 border-b border-white/10 flex justify-between items-center">
+            <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] sticky top-0 bg-black/80 backdrop-blur-md z-10 border-b border-white/10 flex justify-between items-center">
                 <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">选择时代</h1>
                 <span className="text-xs text-gray-500">共 {scenes.length} 个世界</span>
             </div>
