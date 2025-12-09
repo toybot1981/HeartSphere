@@ -1,0 +1,35 @@
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+spring:
+  application:
+    name: heartsphere-backend
+  
+  datasource:
+    url: jdbc:mysql://localhost:3306/heartsphere_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: password # Change this to your local DB password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update # Use 'validate' in production
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # Upload limits for images
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# Cors Configuration (Global)
+heartsphere:
+  cors:
+    allowed-origins: "http://localhost:5173,http://localhost:3000" # Frontend URLs
