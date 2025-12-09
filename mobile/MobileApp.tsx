@@ -366,6 +366,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                         history={gameState.history}
                         onOpenSettings={() => setShowSettings(true)}
                         onLogout={handleLogout}
+                        onUpdateProfile={(profile) => setGameState(prev => ({ ...prev, userProfile: profile }))}
                     />
                 )}
 
@@ -393,6 +394,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
                     settings={gameState.settings}
                     gameState={gameState}
                     onSettingsChange={s => setGameState(prev => ({...prev, settings: s}))}
+                    onUpdateProfile={(profile) => setGameState(prev => ({ ...prev, userProfile: profile }))}
                     onClose={() => setShowSettings(false)}
                     onLogout={handleLogout}
                     onBindAccount={() => { setShowSettings(false); setShowLoginModal(true); }}

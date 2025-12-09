@@ -1105,6 +1105,7 @@ const App: React.FC = () => {
           settings={gameState.settings} 
           gameState={gameState}
           onSettingsChange={(newSettings) => setGameState(prev => ({ ...prev, settings: newSettings }))}
+          onUpdateProfile={(profile) => setGameState(prev => ({ ...prev, userProfile: profile }))}
           onClose={() => setShowSettingsModal(false)} 
           onLogout={handleLogout}
           onBindAccount={() => { setShowSettingsModal(false); setShowLoginModal(true); }}

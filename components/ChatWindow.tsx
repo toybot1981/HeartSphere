@@ -386,9 +386,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         <div className="absolute top-0 left-0 right-0 p-4 z-20 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center transition-opacity duration-500">
           <div className="flex items-center space-x-3">
             <Button variant="ghost" onClick={handleBackClick} className="!p-2"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></Button>
-            <div className="flex flex-col">
+            <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold tracking-wider">{customScenario ? customScenario.title : character.name}</h2>
-              <div className="text-xs uppercase tracking-widest opacity-80" style={{ color: character.colorAccent }}>{customScenario ? '原创剧本' : '连接中'}</div>
+              <span className="text-xs uppercase tracking-widest opacity-80" style={{ color: character.colorAccent }}>{customScenario ? '原创剧本' : '已连接'}</span>
             </div>
           </div>
           <div className="flex items-center space-x-2">

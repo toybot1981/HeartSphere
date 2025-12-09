@@ -797,6 +797,12 @@ export class GeminiService {
       return this.generateImageFromPrompt(prompt, '3:4');
   }
 
+  // --- User Avatar Gen ---
+  async generateUserAvatar(nickname: string): Promise<string | null> {
+      const prompt = `Profile avatar for a user named "${nickname}". Style: Modern Anime, Cyberpunk, or Dreamy Digital Art. High quality, centered face or symbol.`;
+      return this.generateImageFromPrompt(prompt, '1:1');
+  }
+
   // --- TTS ---
   async generateSpeech(text: string, voiceName: string): Promise<string | null> {
     if (this.settings?.audioProvider !== 'gemini' && !this.settings?.enableFallback) return null;

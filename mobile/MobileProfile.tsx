@@ -1,6 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { UserProfile, JournalEntry, Character, Mail } from '../types';
+import { geminiService } from '../services/gemini';
 
 interface MobileProfileProps {
   userProfile: UserProfile;
@@ -9,6 +10,7 @@ interface MobileProfileProps {
   history: Record<string, any[]>;
   onOpenSettings: () => void;
   onLogout: () => void;
+  onUpdateProfile?: (profile: UserProfile) => void;
 }
 
 export const MobileProfile: React.FC<MobileProfileProps> = ({ 
@@ -17,24 +19,51 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   mailbox,
   history,
   onOpenSettings,
-  onLogout 
+  onLogout,
+  onUpdateProfile
 }) => {
   const charactersMetCount = Object.keys(history).length;
   const unreadMailCount = mailbox.filter(m => !m.isRead).length;
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleGenerateAvatar = async () => {
+      if (!onUpdateProfile) return;
+      setIsGenerating(true);
+      try {
+          const url = await geminiService.generateUserAvatar(userProfile.nickname);
+          if (url) {
+              onUpdateProfile({ ...userProfile, avatarUrl: url });
+          }
+      } catch (e) {
+          console.error(e);
+          alert("生成失败");
+      } finally {
+          setIsGenerating(false);
+      }
+  };
 
   return (
     <div className="h-full bg-black pb-32 overflow-y-auto">
       {/* Header Profile Card */}
       <div className="p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-900/40 rounded-b-3xl shadow-2xl border-b border-white/5">
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 p-[2px]">
-             <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
-               {userProfile.avatarUrl ? (
-                 <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-               ) : (
-                 <span className="text-2xl font-bold text-white">{userProfile.nickname[0]}</span>
-               )}
-             </div>
+          <div className="relative group cursor-pointer" onClick={handleGenerateAvatar}>
+              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 p-[2px]">
+                 <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
+                   {isGenerating ? (
+                       <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                   ) : userProfile.avatarUrl ? (
+                     <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                   ) : (
+                     <span className="text-2xl font-bold text-white">{userProfile.nickname[0]}</span>
+                   )}
+                 </div>
+              </div>
+              {!isGenerating && (
+                  <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-1.5 border border-white/10 shadow-lg">
+                      <span className="text-xs">🪄</span>
+                  </div>
+              )}
           </div>
           <div className="flex-1">
             <h2 className="text-2xl font-bold text-white">{userProfile.nickname}</h2>
@@ -109,7 +138,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
                 退出登录
             </button>
             <p className="text-center text-[10px] text-gray-700 mt-4">
-                HeartSphere Mobile v1.0.2
+                HeartSphere Mobile v1.0.3
             </p>
         </div>
       </div>

@@ -1,13 +1,15 @@
 
 import React, { useRef, useState } from 'react';
-import { AppSettings, GameState, AIProvider } from '../types';
+import { AppSettings, GameState, AIProvider, UserProfile } from '../types';
 import { Button } from './Button';
 import { storageService } from '../services/storage';
+import { geminiService } from '../services/gemini';
 
 interface SettingsModalProps {
   settings: AppSettings;
   gameState: GameState; // Pass full state for backup
   onSettingsChange: (newSettings: AppSettings) => void;
+  onUpdateProfile?: (profile: UserProfile) => void; // New prop for profile updates
   onClose: () => void;
   onLogout: () => void;
   onBindAccount: () => void;
@@ -47,10 +49,11 @@ const ConfigSection: React.FC<{ title: string; children: React.ReactNode }> = ({
     </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onClose, onLogout, onBindAccount }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onUpdateProfile, onClose, onLogout, onBindAccount }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [backupMsg, setBackupMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'general' | 'models' | 'backup'>('general');
+  const [isGeneratingAvatar, setIsGeneratingAvatar] = useState(false);
 
   const handleExportBackup = () => {
     // We use the current in-memory state for export, which is the most up-to-date
@@ -111,6 +114,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
     reader.readAsText(file);
   };
 
+  const handleGenerateAvatar = async () => {
+      if (!gameState.userProfile || !onUpdateProfile) return;
+      setIsGeneratingAvatar(true);
+      try {
+          const url = await geminiService.generateUserAvatar(gameState.userProfile.nickname);
+          if (url) {
+              onUpdateProfile({ ...gameState.userProfile, avatarUrl: url });
+          } else {
+              alert("头像生成失败，请重试。");
+          }
+      } catch (e) {
+          console.error(e);
+          alert("请求失败，请检查网络或配置。");
+      } finally {
+          setIsGeneratingAvatar(false);
+      }
+  };
+
   // Helper to update specific provider config
   const updateProviderConfig = (provider: AIProvider, key: string, value: string) => {
       const configKey = provider === 'gemini' ? 'geminiConfig' : provider === 'openai' ? 'openaiConfig' : provider === 'doubao' ? 'doubaoConfig' : 'qwenConfig';
@@ -166,18 +187,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                 <div className="space-y-4">
                      {/* Account Section */}
                     <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex justify-between items-center mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                                {gameState.userProfile?.nickname?.[0] || 'G'}
+                        <div className="flex items-center gap-4">
+                            <div className="relative group cursor-pointer" onClick={handleGenerateAvatar}>
+                                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 flex items-center justify-center text-white font-bold text-xl overflow-hidden shadow-lg border-2 border-white/20">
+                                    {isGeneratingAvatar ? (
+                                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : gameState.userProfile?.avatarUrl ? (
+                                        <img src={gameState.userProfile.avatarUrl} className="w-full h-full object-cover" alt="User Avatar" />
+                                    ) : (
+                                        gameState.userProfile?.nickname?.[0] || 'G'
+                                    )}
+                                </div>
+                                {!isGeneratingAvatar && (
+                                    <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <span className="text-xs">✨</span>
+                                    </div>
+                                )}
                             </div>
+                            
                             <div>
-                                <p className="text-white font-bold">{gameState.userProfile?.nickname || '访客'}</p>
+                                <p className="text-white font-bold text-lg">{gameState.userProfile?.nickname || '访客'}</p>
                                 <p className="text-xs text-gray-400">
                                     {gameState.userProfile?.isGuest ? '访客身份 (未绑定)' : `已登录 (${gameState.userProfile?.phoneNumber || 'WeChat'})`}
                                 </p>
+                                <button onClick={handleGenerateAvatar} disabled={isGeneratingAvatar} className="text-[10px] text-pink-400 hover:underline mt-1">
+                                    {isGeneratingAvatar ? '正在绘制...' : '✨ 生成 AI 头像'}
+                                </button>
                             </div>
                         </div>
-                        <div className="flex gap-2">
+                        
+                        <div className="flex flex-col gap-2">
                              {gameState.userProfile?.isGuest && (
                                 <Button variant="ghost" onClick={onBindAccount} className="text-xs text-pink-400 hover:bg-pink-900/20 hover:text-pink-300 border border-pink-500/30">
                                     绑定账号
