@@ -18,6 +18,11 @@ server:
   servlet:
     context-path: /api
 
+# JWT Configuration
+jwt:
+  secret: ThisIsASecureJWTSecretKeyForDevelopmentOnly1234567890
+  expirationMs: 86400000
+
 springdoc:
   api-docs:
     path: /v3/api-docs

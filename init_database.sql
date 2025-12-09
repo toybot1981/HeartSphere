@@ -90,13 +90,25 @@ CREATE TABLE IF NOT EXISTS story_options (
     FOREIGN KEY (next_node_id) REFERENCES story_nodes(id) ON DELETE CASCADE
 );
 
+-- 创建用户表
+CREATE TABLE IF NOT EXISTS users (
+    id VARCHAR(36) PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 -- 创建用户配置表
 CREATE TABLE IF NOT EXISTS user_profiles (
     id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL UNIQUE,
     nickname VARCHAR(100) NOT NULL,
     avatar_url VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- 创建日志回声表
@@ -276,10 +288,15 @@ INSERT INTO story_options (id, story_node_id, text, next_node_id)
 VALUES 
 ('1', '1', '上前与他攀谈', '1');
 
--- 插入示例用户配置
-INSERT INTO user_profiles (id, nickname, avatar_url) 
+-- 插入示例用户
+INSERT INTO users (id, username, password, email) 
 VALUES 
-('1', '测试用户', 'https://example.com/avatar.jpg');
+('1', 'testuser', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'test@example.com');
+
+-- 插入示例用户配置
+INSERT INTO user_profiles (id, user_id, nickname, avatar_url) 
+VALUES 
+('1', '1', '测试用户', 'https://example.com/avatar.jpg');
 
 -- 插入示例日志回声
 INSERT INTO journal_echos (id, character_name, text, timestamp, image_url) 
