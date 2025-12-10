@@ -35,26 +35,18 @@ export const EraConstructorModal: React.FC<EraConstructorModalProps> = ({ initia
     }
   }, [initialScene]);
 
-  const handleGenerateImage = async () => {
+  const handleGetPrompt = async () => {
     if (!name || !description) {
-        setError('请先填写时代名称和简介，以便AI更好地创作封面。');
+        setError('请先填写时代名称和简介。');
         return;
     }
-    setError('');
-    setIsLoading(true);
+    const prompt = geminiService.constructEraCoverPrompt(name, description);
     try {
-        const prompt = `A beautiful, high-quality vertical anime world illustration for a world named "${name}". The theme is: "${description}". Style: Modern Chinese Anime (Manhua), cinematic lighting, vibrant, epic feel.`;
-        const generatedImage = await geminiService.generateImageFromPrompt(prompt, '3:4');
-        if (generatedImage) {
-            setImageUrl(generatedImage);
-        } else {
-            setError('图片生成失败，请重试。');
-        }
+        await navigator.clipboard.writeText(prompt);
+        alert('提示词已复制到剪贴板！请使用 Midjourney 或其他工具生成图片后上传。');
+        setImageMode('upload');
     } catch (e) {
-        console.error(e);
-        setError('图片生成时发生网络错误，请稍后重试。');
-    } finally {
-        setIsLoading(false);
+        alert('复制失败，请手动复制：\n' + prompt);
     }
   };
 
@@ -123,64 +115,47 @@ export const EraConstructorModal: React.FC<EraConstructorModalProps> = ({ initia
         <div className="space-y-3">
              <div className="flex gap-4 border-b border-gray-700 pb-2">
                 <button 
-                  onClick={() => setImageMode('generate')}
-                  className={`text-sm font-bold pb-2 transition-colors ${imageMode === 'generate' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500 hover:text-white'}`}
-                >
-                    AI 绘制封面
-                </button>
-                <button 
                   onClick={() => setImageMode('upload')}
                   className={`text-sm font-bold pb-2 transition-colors ${imageMode === 'upload' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500 hover:text-white'}`}
                 >
-                    上传影像记忆
+                    封面设置
                 </button>
              </div>
 
              <div className="flex items-start gap-4">
                 <div 
-                    onClick={() => imageMode === 'upload' && fileInputRef.current?.click()}
-                    className={`w-1/3 h-48 rounded-lg bg-black/30 border border-dashed flex items-center justify-center overflow-hidden transition-all ${imageMode === 'upload' ? 'cursor-pointer hover:border-pink-500 border-gray-600' : 'border-gray-700'}`}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`w-1/3 h-48 rounded-lg bg-black/30 border border-dashed flex items-center justify-center overflow-hidden transition-all cursor-pointer hover:border-pink-500 border-gray-600`}
                 >
-                   {isLoading && !imageUrl && imageMode === 'generate' && <div className="w-8 h-8 border-4 border-t-transparent border-pink-400 rounded-full animate-spin" />}
-                   
                    {imageUrl ? (
                        <img src={imageUrl} alt="Cover" className="w-full h-full object-cover" />
                    ) : (
                        <div className="text-center p-2">
-                           {imageMode === 'generate' ? (
-                               <span className="text-xs text-gray-500">等待生成...</span>
-                           ) : (
-                               <div className="flex flex-col items-center text-gray-400">
-                                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 mb-2">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                                   </svg>
-                                   <span className="text-xs">点击上传</span>
-                               </div>
-                           )}
+                           <div className="flex flex-col items-center text-gray-400">
+                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 mb-2">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                               </svg>
+                               <span className="text-xs">点击上传</span>
+                           </div>
                        </div>
                    )}
                 </div>
                 
                 <div className="flex-1 space-y-3 flex flex-col justify-center h-48">
-                    {imageMode === 'generate' ? (
-                        <>
-                           <p className="text-xs text-gray-400">先填写下方描述，然后让AI为你绘制想象中的世界。</p>
-                           <Button onClick={handleGenerateImage} disabled={isLoading || !name || !description} className="bg-indigo-600 hover:bg-indigo-500 text-sm">
-                                {isLoading ? '绘制中...' : '✨ AI 生成封面'}
-                           </Button>
-                        </>
-                    ) : (
-                        <>
-                           <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
-                           <p className="text-xs text-gray-400">上传一张老照片、海报或风景照。AI 可以帮你解析其中的记忆。</p>
-                           {imageUrl && (
-                               <Button onClick={handleAnalyzeImage} disabled={isLoading} className="bg-gradient-to-r from-pink-600 to-purple-600 text-sm">
-                                   {isLoading ? '解析中...' : '🧠 解析影像记忆'}
-                               </Button>
-                           )}
-                           {!imageUrl && <p className="text-xs text-gray-600">请先上传图片...</p>}
-                        </>
-                    )}
+                    <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
+                    <p className="text-xs text-gray-400">手动上传图片，或获取 AI 提示词去其他平台生成。</p>
+                    
+                    <div className="flex gap-2 flex-wrap">
+                        <Button onClick={handleGetPrompt} disabled={!name || !description} variant="secondary" className="text-xs">
+                            📋 获取 AI 提示词
+                        </Button>
+                        {imageUrl && (
+                            <Button onClick={handleAnalyzeImage} disabled={isLoading} className="bg-gradient-to-r from-pink-600 to-purple-600 text-xs">
+                                {isLoading ? '解析中...' : '🧠 解析影像记忆'}
+                            </Button>
+                        )}
+                    </div>
+                    {!imageUrl && <p className="text-xs text-gray-600">请上传图片...</p>}
                 </div>
             </div>
         </div>
@@ -211,7 +186,7 @@ export const EraConstructorModal: React.FC<EraConstructorModalProps> = ({ initia
             )}
             <Button variant="ghost" onClick={onClose}>取消</Button>
             <Button onClick={handleSave} disabled={isSaveDisabled}>
-                {imageMode === 'upload' ? '封存记忆' : initialScene ? '保存修改' : '创建时代'}
+                {initialScene ? '保存修改' : '创建时代'}
             </Button>
         </div>
       </div>

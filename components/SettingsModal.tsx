@@ -51,9 +51,9 @@ const ConfigSection: React.FC<{ title: string; children: React.ReactNode }> = ({
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameState, onSettingsChange, onUpdateProfile, onClose, onLogout, onBindAccount }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [backupMsg, setBackupMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'general' | 'models' | 'backup'>('general');
-  const [isGeneratingAvatar, setIsGeneratingAvatar] = useState(false);
 
   const handleExportBackup = () => {
     // We use the current in-memory state for export, which is the most up-to-date
@@ -114,21 +114,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
     reader.readAsText(file);
   };
 
-  const handleGenerateAvatar = async () => {
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!gameState.userProfile || !onUpdateProfile) return;
-      setIsGeneratingAvatar(true);
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              onUpdateProfile({ ...gameState.userProfile!, avatarUrl: reader.result as string });
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const handleGetAvatarPrompt = async () => {
+      if (!gameState.userProfile) return;
+      const prompt = geminiService.constructUserAvatarPrompt(gameState.userProfile.nickname);
       try {
-          const url = await geminiService.generateUserAvatar(gameState.userProfile.nickname);
-          if (url) {
-              onUpdateProfile({ ...gameState.userProfile, avatarUrl: url });
-          } else {
-              alert("头像生成失败，请重试。");
-          }
+          await navigator.clipboard.writeText(prompt);
+          alert("头像提示词已复制！");
       } catch (e) {
-          console.error(e);
-          alert("请求失败，请检查网络或配置。");
-      } finally {
-          setIsGeneratingAvatar(false);
+          alert("复制失败: " + prompt);
       }
   };
 
@@ -188,21 +193,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                      {/* Account Section */}
                     <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700 flex justify-between items-center mb-4">
                         <div className="flex items-center gap-4">
-                            <div className="relative group cursor-pointer" onClick={handleGenerateAvatar}>
+                            <div className="relative group cursor-pointer" onClick={() => avatarInputRef.current?.click()}>
+                                <input type="file" ref={avatarInputRef} onChange={handleAvatarUpload} accept="image/*" className="hidden" />
                                 <div className="w-16 h-16 rounded-full bg-gradient-to-r from-pink-500 to-purple-500 flex items-center justify-center text-white font-bold text-xl overflow-hidden shadow-lg border-2 border-white/20">
-                                    {isGeneratingAvatar ? (
-                                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    ) : gameState.userProfile?.avatarUrl ? (
+                                    {gameState.userProfile?.avatarUrl ? (
                                         <img src={gameState.userProfile.avatarUrl} className="w-full h-full object-cover" alt="User Avatar" />
                                     ) : (
                                         gameState.userProfile?.nickname?.[0] || 'G'
                                     )}
                                 </div>
-                                {!isGeneratingAvatar && (
-                                    <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <span className="text-xs">✨</span>
-                                    </div>
-                                )}
+                                <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <span className="text-xs">上传</span>
+                                </div>
                             </div>
                             
                             <div>
@@ -210,8 +212,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, gameStat
                                 <p className="text-xs text-gray-400">
                                     {gameState.userProfile?.isGuest ? '访客身份 (未绑定)' : `已登录 (${gameState.userProfile?.phoneNumber || 'WeChat'})`}
                                 </p>
-                                <button onClick={handleGenerateAvatar} disabled={isGeneratingAvatar} className="text-[10px] text-pink-400 hover:underline mt-1">
-                                    {isGeneratingAvatar ? '正在绘制...' : '✨ 生成 AI 头像'}
+                                <button onClick={handleGetAvatarPrompt} className="text-[10px] text-pink-400 hover:underline mt-1 mr-2">
+                                    📋 复制 AI 头像提示词
                                 </button>
                             </div>
                         </div>

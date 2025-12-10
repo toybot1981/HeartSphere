@@ -308,11 +308,6 @@ const App: React.FC = () => {
     setGameState(nextState);
     setShowSettingsModal(false);
     
-    // Clear API token
-    import('./services/api').then(({ apiService }) => {
-      apiService.logout();
-    });
-    
     // Force immediate save to override any debounced saves
     storageService.saveState(nextState).catch(console.error);
   };

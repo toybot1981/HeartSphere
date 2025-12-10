@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Character, WorldScene } from '../types';
 import { geminiService } from '../services/gemini';
 import { Button } from './Button';
@@ -18,7 +18,11 @@ export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps>
   const [generatedCharacter, setGeneratedCharacter] = useState<Character | null>(null);
   
   // Edit Mode State
-  const [activeTab, setActiveTab] = useState<'basic' | 'personality' | 'depth'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'personality' | 'depth' | 'visuals'>('basic');
+  
+  // Refs for uploads
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const bgInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (initialCharacter) {
@@ -38,6 +42,7 @@ export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps>
         const newCharacter = await geminiService.generateCharacterFromPrompt(prompt, scene.name);
         if (newCharacter) {
             setGeneratedCharacter(newCharacter);
+            setActiveTab('visuals'); // Focus on visuals after generation
         } else {
             setError('角色生成失败，请调整你的想法或稍后重试。');
         }
@@ -67,20 +72,55 @@ export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps>
     }
   };
 
+  const handleFileUpload = (type: 'avatar' | 'background', e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file && generatedCharacter) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              if (type === 'avatar') {
+                  updateCharacter('avatarUrl', reader.result as string);
+              } else {
+                  updateCharacter('backgroundUrl', reader.result as string);
+              }
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const handleGetPrompt = async (type: 'avatar' | 'background') => {
+      if (!generatedCharacter) return;
+      let p = '';
+      if (type === 'avatar') {
+          p = geminiService.constructCharacterAvatarPrompt(generatedCharacter.name, generatedCharacter.role, generatedCharacter.bio, generatedCharacter.themeColor);
+      } else {
+          p = geminiService.constructCharacterBackgroundPrompt(generatedCharacter.name, generatedCharacter.bio, scene.name);
+      }
+      try {
+          await navigator.clipboard.writeText(p);
+          alert('提示词已复制！');
+      } catch(e) { alert('复制失败'); }
+  };
+
   const renderEditor = () => {
       if (!generatedCharacter) return null;
 
       return (
           <div className="flex-1 overflow-y-auto scrollbar-hide pr-2">
              <div className="flex justify-center mb-6">
-                 <img src={generatedCharacter.avatarUrl} alt={generatedCharacter.name} className="w-24 h-32 object-cover rounded-xl border-4 border-white/10 shadow-lg" />
+                 <div className="relative group">
+                     <img src={generatedCharacter.avatarUrl} alt={generatedCharacter.name} className="w-24 h-32 object-cover rounded-xl border-4 border-white/10 shadow-lg" />
+                     <button onClick={() => setActiveTab('visuals')} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity rounded-xl">
+                         修改图片
+                     </button>
+                 </div>
              </div>
 
              {/* Tabs */}
-             <div className="flex border-b border-gray-700 mb-4">
-                 <button onClick={() => setActiveTab('basic')} className={`flex-1 pb-2 text-xs font-bold ${activeTab === 'basic' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500'}`}>基本信息</button>
-                 <button onClick={() => setActiveTab('personality')} className={`flex-1 pb-2 text-xs font-bold ${activeTab === 'personality' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500'}`}>性格锚点</button>
-                 <button onClick={() => setActiveTab('depth')} className={`flex-1 pb-2 text-xs font-bold ${activeTab === 'depth' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500'}`}>潜意识与深度</button>
+             <div className="flex border-b border-gray-700 mb-4 overflow-x-auto">
+                 <button onClick={() => setActiveTab('basic')} className={`flex-1 min-w-[70px] pb-2 text-xs font-bold whitespace-nowrap ${activeTab === 'basic' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500'}`}>基本信息</button>
+                 <button onClick={() => setActiveTab('personality')} className={`flex-1 min-w-[70px] pb-2 text-xs font-bold whitespace-nowrap ${activeTab === 'personality' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500'}`}>性格锚点</button>
+                 <button onClick={() => setActiveTab('depth')} className={`flex-1 min-w-[70px] pb-2 text-xs font-bold whitespace-nowrap ${activeTab === 'depth' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500'}`}>深度</button>
+                 <button onClick={() => setActiveTab('visuals')} className={`flex-1 min-w-[70px] pb-2 text-xs font-bold whitespace-nowrap ${activeTab === 'visuals' ? 'text-pink-400 border-b-2 border-pink-400' : 'text-gray-500'}`}>视觉</button>
              </div>
 
              <div className="space-y-4">
@@ -140,6 +180,40 @@ export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps>
                         </div>
                      </>
                  )}
+
+                 {activeTab === 'visuals' && (
+                     <div className="space-y-6">
+                         {/* Avatar Upload */}
+                         <div className="bg-gray-800 p-3 rounded-lg border border-gray-700">
+                             <div className="flex justify-between items-center mb-2">
+                                 <span className="text-xs font-bold text-gray-400">角色头像</span>
+                                 <div className="flex gap-2">
+                                     <button onClick={() => handleGetPrompt('avatar')} className="text-[10px] text-pink-400 hover:text-pink-300">复制 Prompt</button>
+                                     <button onClick={() => avatarInputRef.current?.click()} className="text-[10px] bg-gray-700 px-2 py-1 rounded hover:bg-gray-600">上传</button>
+                                 </div>
+                             </div>
+                             <input type="file" ref={avatarInputRef} onChange={e => handleFileUpload('avatar', e)} accept="image/*" className="hidden" />
+                             <div className="flex justify-center">
+                                 <img src={generatedCharacter.avatarUrl} className="h-32 object-contain rounded" />
+                             </div>
+                         </div>
+
+                         {/* Background Upload */}
+                         <div className="bg-gray-800 p-3 rounded-lg border border-gray-700">
+                             <div className="flex justify-between items-center mb-2">
+                                 <span className="text-xs font-bold text-gray-400">背景场景</span>
+                                 <div className="flex gap-2">
+                                     <button onClick={() => handleGetPrompt('background')} className="text-[10px] text-pink-400 hover:text-pink-300">复制 Prompt</button>
+                                     <button onClick={() => bgInputRef.current?.click()} className="text-[10px] bg-gray-700 px-2 py-1 rounded hover:bg-gray-600">上传</button>
+                                 </div>
+                             </div>
+                             <input type="file" ref={bgInputRef} onChange={e => handleFileUpload('background', e)} accept="image/*" className="hidden" />
+                             <div className="flex justify-center">
+                                 <img src={generatedCharacter.backgroundUrl} className="h-32 w-full object-cover rounded" />
+                             </div>
+                         </div>
+                     </div>
+                 )}
              </div>
           </div>
       );
@@ -170,7 +244,7 @@ export const CharacterConstructorModal: React.FC<CharacterConstructorModalProps>
                     />
                 </div>
                 <Button onClick={handleGenerate} disabled={isLoading || !prompt.trim()} fullWidth className="bg-indigo-600 hover:bg-indigo-500 flex items-center justify-center">
-                    {isLoading ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />正在生成中...</>) : (<>✨ AI 生成角色</>)}
+                    {isLoading ? (<><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />正在构思中...</>) : (<>✨ AI 生成设定 (不含图)</>)}
                 </Button>
                 {error && <p className="text-sm text-red-400 text-center">{error}</p>}
             </div>

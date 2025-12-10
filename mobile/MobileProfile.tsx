@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useRef } from 'react';
 import { UserProfile, JournalEntry, Character, Mail } from '../types';
 import { geminiService } from '../services/gemini';
 
@@ -24,21 +24,26 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
 }) => {
   const charactersMetCount = Object.keys(history).length;
   const unreadMailCount = mailbox.filter(m => !m.isRead).length;
-  const [isGenerating, setIsGenerating] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleGenerateAvatar = async () => {
-      if (!onUpdateProfile) return;
-      setIsGenerating(true);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file && onUpdateProfile) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              onUpdateProfile({ ...userProfile, avatarUrl: reader.result as string });
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const handleCopyPrompt = async () => {
+      const prompt = geminiService.constructUserAvatarPrompt(userProfile.nickname);
       try {
-          const url = await geminiService.generateUserAvatar(userProfile.nickname);
-          if (url) {
-              onUpdateProfile({ ...userProfile, avatarUrl: url });
-          }
+          await navigator.clipboard.writeText(prompt);
+          alert("提示词已复制！");
       } catch (e) {
-          console.error(e);
-          alert("生成失败");
-      } finally {
-          setIsGenerating(false);
+          alert("复制失败");
       }
   };
 
@@ -47,34 +52,36 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
       {/* Header Profile Card */}
       <div className="p-6 pt-[calc(1.5rem+env(safe-area-inset-top))] bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-900/40 rounded-b-3xl shadow-2xl border-b border-white/5">
         <div className="flex items-center gap-4 mb-6">
-          <div className="relative group cursor-pointer" onClick={handleGenerateAvatar}>
+          <div className="relative group" onClick={() => fileInputRef.current?.click()}>
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
               <div className="w-20 h-20 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 p-[2px]">
                  <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
-                   {isGenerating ? (
-                       <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                   ) : userProfile.avatarUrl ? (
+                   {userProfile.avatarUrl ? (
                      <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                    ) : (
                      <span className="text-2xl font-bold text-white">{userProfile.nickname[0]}</span>
                    )}
                  </div>
               </div>
-              {!isGenerating && (
-                  <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-1.5 border border-white/10 shadow-lg">
-                      <span className="text-xs">🪄</span>
-                  </div>
-              )}
+              <div className="absolute -bottom-1 -right-1 bg-gray-800 rounded-full p-1.5 border border-white/10 shadow-lg cursor-pointer">
+                  <span className="text-xs">📷</span>
+              </div>
           </div>
           <div className="flex-1">
             <h2 className="text-2xl font-bold text-white">{userProfile.nickname}</h2>
             <p className="text-sm text-gray-400">
                {userProfile.isGuest ? '访客身份 (未绑定)' : '已连接至心域网络'}
             </p>
-            {userProfile.isGuest && (
-              <button onClick={onOpenSettings} className="mt-2 text-xs bg-pink-600/20 text-pink-400 px-3 py-1 rounded-full border border-pink-600/30">
-                绑定账号
-              </button>
-            )}
+            <div className="flex gap-2 mt-2">
+                {userProfile.isGuest && (
+                <button onClick={onOpenSettings} className="text-xs bg-pink-600/20 text-pink-400 px-3 py-1 rounded-full border border-pink-600/30">
+                    绑定账号
+                </button>
+                )}
+                <button onClick={handleCopyPrompt} className="text-xs bg-indigo-600/20 text-indigo-400 px-3 py-1 rounded-full border border-indigo-600/30">
+                    复制头像 Prompt
+                </button>
+            </div>
           </div>
         </div>
 

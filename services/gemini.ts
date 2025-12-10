@@ -704,20 +704,9 @@ export class GeminiService {
         const jsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         const details = JSON.parse(jsonStr);
 
+        // DO NOT Auto Generate Image to save cost. Use placeholder.
         let avatarUrl = 'https://picsum.photos/seed/default_avatar/400/600';
         let backgroundUrl = 'https://picsum.photos/seed/default_bg/1080/1920';
-
-        try {
-            const avatarPrompt = `High-quality vertical anime character portrait of ${details.name}. Description: ${details.bio}. Role: ${details.role}. Style: Modern Chinese Anime (Manhua), vibrant colors, detailed eyes. Centered character, abstract background matching theme color ${details.themeColor}.`;
-            const genAvatar = await this.generateImageFromPrompt(avatarPrompt, '3:4');
-            if (genAvatar) avatarUrl = genAvatar;
-
-            const bgPrompt = `Atmospheric anime background scene for the world of "${eraName}". It should match the personality of a character described as: "${details.bio}". Style: Modern Chinese Anime (Manhua), high quality, cinematic lighting.`;
-            const genBg = await this.generateImageFromPrompt(bgPrompt, '9:16');
-            if (genBg) backgroundUrl = genBg;
-        } catch (imgError) {
-            console.warn("Image generation failed", imgError);
-        }
 
         const newCharacter: Character = {
             id: `custom_${Date.now()}`,
@@ -791,15 +780,36 @@ export class GeminiService {
       return null;
   }
 
-  // --- Avatar Gen Wrapper ---
+  // --- Prompt Constructors (Cost Saving) ---
+  constructEraCoverPrompt(name: string, description: string): string {
+      return `A beautiful, high-quality vertical anime world illustration for a world named "${name}". The theme is: "${description}". Style: Modern Chinese Anime (Manhua), cinematic lighting, vibrant, epic feel.`;
+  }
+
+  constructCharacterAvatarPrompt(name: string, role: string, bio: string, themeColor: string): string {
+      return `High-quality vertical anime character portrait of ${name}. Role: ${role}. Description: ${bio}. Style: Modern Chinese Anime (Manhua), vibrant colors, detailed eyes. Centered character, abstract background matching theme color ${themeColor}.`;
+  }
+
+  constructCharacterBackgroundPrompt(name: string, bio: string, eraName: string): string {
+      return `Atmospheric anime background scene for the world of "${eraName}". It should match the personality of a character named ${name}, described as: "${bio}". Style: Modern Chinese Anime (Manhua), high quality, cinematic lighting.`;
+  }
+
+  constructUserAvatarPrompt(nickname: string): string {
+      return `Profile avatar for a user named "${nickname}". Style: Modern Anime, Cyberpunk, or Dreamy Digital Art. High quality, centered face or symbol.`;
+  }
+
+  constructMoodPrompt(content: string): string {
+      return `Abstract, artistic, high-quality illustration representing this emotion/thought: "${content.substring(0, 100)}...". Style: Ethereal, Dreamlike, Digital Art, vibrant colors, expressive brushstrokes.`;
+  }
+
+  // --- Avatar Gen Wrapper (Legacy/Direct) ---
   async generateCharacterImage(character: Character): Promise<string | null> {
-      const prompt = `High-quality vertical anime character portrait of ${character.name}. Role: ${character.role}. Description: ${character.bio}. Style: Modern Chinese Anime (Manhua), detailed, cinematic lighting, ${character.themeColor} theme.`;
+      const prompt = this.constructCharacterAvatarPrompt(character.name, character.role, character.bio, character.themeColor);
       return this.generateImageFromPrompt(prompt, '3:4');
   }
 
   // --- User Avatar Gen ---
   async generateUserAvatar(nickname: string): Promise<string | null> {
-      const prompt = `Profile avatar for a user named "${nickname}". Style: Modern Anime, Cyberpunk, or Dreamy Digital Art. High quality, centered face or symbol.`;
+      const prompt = this.constructUserAvatarPrompt(nickname);
       return this.generateImageFromPrompt(prompt, '1:1');
   }
 
