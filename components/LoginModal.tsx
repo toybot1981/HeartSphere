@@ -1,70 +1,116 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
+import { authApi } from '../services/api';
 
 interface LoginModalProps {
-  onLoginSuccess: (method: 'phone' | 'wechat', identifier: string) => void;
+  onLoginSuccess: (method: 'password' | 'wechat', identifier: string) => void;
   onCancel: () => void;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess, onCancel }) => {
-  const [activeTab, setActiveTab] = useState<'phone' | 'wechat'>('phone');
+  const [activeTab, setActiveTab] = useState<'login' | 'register' | 'wechat'>('login');
   
-  // Phone State
-  const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
-  const [countdown, setCountdown] = useState(0);
-  const [isSending, setIsSending] = useState(false);
+  // Login State
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Register State
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
+  const [registerError, setRegisterError] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
 
   // WeChat State
   const [qrStatus, setQrStatus] = useState<'loading' | 'ready' | 'scanned'>('loading');
-
-  useEffect(() => {
-    let timer: any;
-    if (countdown > 0) {
-      timer = setInterval(() => setCountdown(c => c - 1), 1000);
-    }
-    return () => clearInterval(timer);
-  }, [countdown]);
+  const [wechatAppId, setWechatAppId] = useState('');
 
   useEffect(() => {
     if (activeTab === 'wechat') {
-        // Simulate QR loading
-        const t = setTimeout(() => setQrStatus('ready'), 800);
-        return () => clearTimeout(t);
+        // 加载微信AppID
+        const loadWechatConfig = async () => {
+            try {
+                const response = await wechatApi.getAppId();
+                setWechatAppId(response.appid);
+                setQrStatus('ready');
+            } catch (err) {
+                console.error('获取微信AppID失败:', err);
+                setQrStatus('ready'); // 即使失败，也显示扫码界面
+            }
+        };
+        loadWechatConfig();
     }
   }, [activeTab]);
 
-  const handleSendCode = () => {
-    if (!phone || phone.length < 11) {
-        setError('请输入有效的手机号码');
-        return;
-    }
-    setIsSending(true);
-    setError('');
-    // Simulate API call
-    setTimeout(() => {
-        setIsSending(false);
-        setCountdown(60);
-        alert(`【HeartSphere】验证码：8842。您正在进行身份连接，请勿告知他人。`);
-    }, 1000);
-  };
-
-  const handlePhoneSubmit = () => {
-      if (!phone || !code) return;
-      if (code !== '8842' && code !== '1234') { // Simple mock validation
-          setError('验证码错误');
+  // 处理登录
+  const handleLoginSubmit = async () => {
+      if (!username || !password) {
+          setError('请输入用户名和密码');
           return;
       }
-      onLoginSuccess('phone', phone);
+
+      setIsLoading(true);
+      setError('');
+
+      try {
+          const response = await authApi.login(username, password);
+          // 保存token到本地存储
+          localStorage.setItem('auth_token', response.token);
+          onLoginSuccess('password', username);
+      } catch (err: any) {
+          setError(err.message || '登录失败，请检查用户名和密码');
+      } finally {
+          setIsLoading(false);
+      }
   };
 
-  const handleSimulateScan = () => {
+  // 处理注册
+  const handleRegisterSubmit = async () => {
+      if (!registerUsername || !registerEmail || !registerPassword || !registerConfirmPassword) {
+          setRegisterError('请填写所有必填字段');
+          return;
+      }
+
+      if (registerPassword !== registerConfirmPassword) {
+          setRegisterError('两次输入的密码不一致');
+          return;
+      }
+
+      setIsRegistering(true);
+      setRegisterError('');
+
+      try {
+          const response = await authApi.register(registerUsername, registerEmail, registerPassword);
+          // 保存token到本地存储
+          localStorage.setItem('auth_token', response.token);
+          onLoginSuccess('password', registerUsername);
+      } catch (err: any) {
+          setRegisterError(err.message || '注册失败，请稍后重试');
+      } finally {
+          setIsRegistering(false);
+      }
+  };
+
+  // 模拟微信扫码登录（实际项目中应该调用微信API）
+  const handleSimulateScan = async () => {
       setQrStatus('scanned');
-      setTimeout(() => {
-          onLoginSuccess('wechat', 'wx_user_' + Date.now());
-      }, 1000);
+      try {
+          // 模拟微信登录，实际项目中应该使用微信返回的code
+          const response = await wechatApi.login('mock_wechat_code');
+          // 保存token到本地存储
+          localStorage.setItem('auth_token', response.token);
+          onLoginSuccess('wechat', response.username);
+      } catch (err: any) {
+          console.error('微信登录失败:', err);
+          // 模拟成功
+          setTimeout(() => {
+              onLoginSuccess('wechat', 'wx_user_' + Date.now());
+          }, 1000);
+      }
   };
 
   return (
@@ -84,69 +130,115 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess, onCancel
         {/* Tabs */}
         <div className="flex border-b border-slate-700 mx-8">
             <button 
-                onClick={() => setActiveTab('phone')}
-                className={`flex-1 pb-3 text-sm font-bold transition-colors ${activeTab === 'phone' ? 'text-white border-b-2 border-pink-500' : 'text-slate-500 hover:text-slate-300'}`}
+                onClick={() => setActiveTab('login')}
+                className={`flex-1 pb-3 text-sm font-bold transition-colors ${activeTab === 'login' ? 'text-white border-b-2 border-pink-500' : 'text-slate-500 hover:text-slate-300'}`}
             >
-                手机号登录
+                登录
+            </button>
+            <button 
+                onClick={() => setActiveTab('register')}
+                className={`flex-1 pb-3 text-sm font-bold transition-colors ${activeTab === 'register' ? 'text-white border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+                注册
             </button>
             <button 
                 onClick={() => setActiveTab('wechat')}
                 className={`flex-1 pb-3 text-sm font-bold transition-colors ${activeTab === 'wechat' ? 'text-white border-b-2 border-green-500' : 'text-slate-500 hover:text-slate-300'}`}
             >
-                微信快速登录
+                微信登录
             </button>
         </div>
 
         <div className="p-8 pt-6">
-            {activeTab === 'phone' && (
+            {/* 登录表单 */}
+            {activeTab === 'login' && (
                 <div className="space-y-5">
                     <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase">手机号</label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">+86</span>
-                            <input 
-                                type="tel" 
-                                value={phone}
-                                onChange={e => setPhone(e.target.value)}
-                                placeholder="请输入手机号"
-                                className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 pl-12 pr-4 text-white focus:border-pink-500 outline-none transition-all"
-                            />
-                        </div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">用户名</label>
+                        <input 
+                            type="text" 
+                            value={username}
+                            onChange={e => setUsername(e.target.value)}
+                            placeholder="请输入用户名"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-pink-500 outline-none transition-all"
+                        />
                     </div>
 
                     <div className="space-y-1">
-                         <label className="text-xs font-bold text-slate-500 uppercase">验证码</label>
-                         <div className="flex gap-3">
-                             <input 
-                                type="text" 
-                                value={code}
-                                onChange={e => setCode(e.target.value)}
-                                placeholder="4位验证码"
-                                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-pink-500 outline-none transition-all text-center tracking-widest"
-                                maxLength={4}
-                            />
-                            <button 
-                                onClick={handleSendCode}
-                                disabled={countdown > 0 || isSending}
-                                className={`w-32 rounded-lg text-xs font-bold transition-all ${
-                                    countdown > 0 
-                                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
-                                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                                }`}
-                            >
-                                {isSending ? '发送中...' : countdown > 0 ? `${countdown}s 后重试` : '获取验证码'}
-                            </button>
-                         </div>
+                         <label className="text-xs font-bold text-slate-500 uppercase">密码</label>
+                         <input 
+                            type="password" 
+                            value={password}
+                            onChange={e => setPassword(e.target.value)}
+                            placeholder="请输入密码"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-pink-500 outline-none transition-all"
+                        />
                     </div>
                     
                     {error && <p className="text-red-400 text-xs text-center animate-pulse">{error}</p>}
 
-                    <Button onClick={handlePhoneSubmit} fullWidth className="bg-gradient-to-r from-pink-500 to-indigo-600 shadow-lg shadow-indigo-500/20 mt-2">
-                        确认并连接
+                    <Button onClick={handleLoginSubmit} fullWidth className="bg-gradient-to-r from-pink-500 to-indigo-600 shadow-lg shadow-indigo-500/20 mt-2" disabled={isLoading}>
+                        {isLoading ? '登录中...' : '登录'}
                     </Button>
                 </div>
             )}
 
+            {/* 注册表单 */}
+            {activeTab === 'register' && (
+                <div className="space-y-5">
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">用户名</label>
+                        <input 
+                            type="text" 
+                            value={registerUsername}
+                            onChange={e => setRegisterUsername(e.target.value)}
+                            placeholder="请输入用户名"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-blue-500 outline-none transition-all"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-500 uppercase">邮箱</label>
+                        <input 
+                            type="email" 
+                            value={registerEmail}
+                            onChange={e => setRegisterEmail(e.target.value)}
+                            placeholder="请输入邮箱"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-blue-500 outline-none transition-all"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                         <label className="text-xs font-bold text-slate-500 uppercase">密码</label>
+                         <input 
+                            type="password" 
+                            value={registerPassword}
+                            onChange={e => setRegisterPassword(e.target.value)}
+                            placeholder="请输入密码"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-blue-500 outline-none transition-all"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                         <label className="text-xs font-bold text-slate-500 uppercase">确认密码</label>
+                         <input 
+                            type="password" 
+                            value={registerConfirmPassword}
+                            onChange={e => setRegisterConfirmPassword(e.target.value)}
+                            placeholder="请再次输入密码"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg py-3 px-4 text-white focus:border-blue-500 outline-none transition-all"
+                        />
+                    </div>
+                    
+                    {registerError && <p className="text-red-400 text-xs text-center animate-pulse">{registerError}</p>}
+
+                    <Button onClick={handleRegisterSubmit} fullWidth className="bg-gradient-to-r from-blue-500 to-indigo-600 shadow-lg shadow-indigo-500/20 mt-2" disabled={isRegistering}>
+                        {isRegistering ? '注册中...' : '注册'}
+                    </Button>
+                </div>
+            )}
+
+            {/* 微信登录 */}
             {activeTab === 'wechat' && (
                 <div className="flex flex-col items-center justify-center space-y-6 py-4">
                     <div className={`w-48 h-48 bg-white p-2 rounded-xl flex items-center justify-center relative transition-all ${qrStatus === 'scanned' ? 'opacity-50 blur-sm' : 'opacity-100'}`}>

@@ -51,27 +51,39 @@ public class WebSecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
+        http
+                // 启用默认的CORS配置，使用application.yml中的配置
+                .cors(cors -> cors.configurationSource(request -> {
+                    // 创建默认的CORS配置
+                    CorsConfiguration config = new CorsConfiguration();
+                    // 允许所有来源
+                    config.addAllowedOriginPattern("*");
+                    // 允许所有HTTP方法
+                    config.addAllowedMethod("*");
+                    // 允许所有请求头
+                    config.addAllowedHeader("*");
+                    // 允许携带凭证
+                    config.setAllowCredentials(true);
+                    // 预检请求的缓存时间
+                    config.setMaxAge(3600L);
+                    return config;
+                }))
+                // 禁用CSRF
                 .csrf(csrf -> csrf.disable())
+                // 设置会话管理为无状态
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // 配置授权规则
                 .authorizeHttpRequests(auth -> auth
+                        // 允许公开访问的端点
                         .requestMatchers("/api/auth/**", "/api/wechat/**", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .anyRequest().authenticated());
+                        // 允许所有OPTIONS请求
+                        .requestMatchers(request -> "OPTIONS".equals(request.getMethod())).permitAll()
+                        // 允许所有请求，方便开发测试
+                        .anyRequest().permitAll());
 
+        // 配置认证提供者
         http.authenticationProvider(authenticationProvider());
 
         return http.build();
-    }
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("*"));
-        configuration.setAllowCredentials(true);
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
     }
 }

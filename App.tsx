@@ -9,6 +9,7 @@ import { SceneCard } from './components/SceneCard';
 import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene, JournalEntry, JournalEcho, Mail, EraMemory, DebugLog } from './types';
 import { geminiService } from './services/gemini';
 import { storageService } from './services/storage';
+import { authApi } from './services/api';
 import { EraConstructorModal } from './components/EraConstructorModal';
 import { CharacterConstructorModal } from './components/CharacterConstructorModal';
 import { EntryPoint } from './components/EntryPoint';
@@ -279,16 +280,55 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLoginSuccess = (method: 'phone' | 'wechat', identifier: string) => {
-    setGameState(prev => ({
-      ...prev,
-      userProfile: prev.userProfile ? {
-        ...prev.userProfile,
-        isGuest: false,
-        id: identifier, 
-        phoneNumber: method === 'phone' ? identifier : undefined,
-      } : null
-    }));
+  // 处理登录成功
+  const handleLoginSuccess = async (method: 'password' | 'wechat', identifier: string) => {
+    // 从localStorage获取token
+    const token = localStorage.getItem('auth_token');
+    
+    if (token) {
+      try {
+        // 使用token获取完整用户信息
+        const userInfo = await authApi.getCurrentUser(token);
+        
+        setGameState(prev => ({
+          ...prev,
+          userProfile: {
+            id: userInfo.id.toString(),
+            nickname: userInfo.nickname || userInfo.username,
+            avatarUrl: userInfo.avatar || '',
+            email: userInfo.email,
+            isGuest: false,
+            phoneNumber: method === 'password' ? identifier : undefined,
+          }
+        }));
+      } catch (err) {
+        console.error('获取用户信息失败:', err);
+        // 如果获取失败，使用基本信息
+        setGameState(prev => ({
+          ...prev,
+          userProfile: {
+            id: identifier,
+            nickname: identifier,
+            avatarUrl: '',
+            isGuest: false,
+            phoneNumber: method === 'password' ? identifier : undefined,
+          }
+        }));
+      }
+    } else {
+      // 没有token的情况
+      setGameState(prev => ({
+        ...prev,
+        userProfile: {
+          id: identifier,
+          nickname: identifier,
+          avatarUrl: '',
+          isGuest: false,
+          phoneNumber: method === 'password' ? identifier : undefined,
+        }
+      }));
+    }
+    
     setShowLoginModal(false);
     
     if (pendingActionRef.current) {
@@ -297,7 +337,38 @@ const App: React.FC = () => {
     }
   };
 
+  // 检查本地存储中的token，自动登录
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          const userInfo = await authApi.getCurrentUser(token);
+          setGameState(prev => ({
+            ...prev,
+            userProfile: {
+              id: userInfo.id.toString(),
+              nickname: userInfo.nickname || userInfo.username,
+              avatarUrl: userInfo.avatar || '',
+              email: userInfo.email,
+              isGuest: false,
+            }
+          }));
+        } catch (err) {
+          console.error('自动登录失败:', err);
+          // token无效，清除
+          localStorage.removeItem('auth_token');
+        }
+      }
+    };
+    
+    checkAuth();
+  }, []);
+
   const handleLogout = () => {
+    // 清除localStorage中的token
+    localStorage.removeItem('auth_token');
+    
     const nextState: GameState = {
         ...gameState,
         userProfile: null,
