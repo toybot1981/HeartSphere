@@ -22,36 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Java build files
-target/
-*.jar
-*.war
-*.ear
-*.class
-
-# Maven
-.mvn/
-*.pom
-
-# Gradle
-.gradle/
-build/
-
-# Spring Boot
-*.properties
-*.yml
-
-# Database
-*.sql
-*.db
-*.sqlite
-
-# Logs
-logs/
-*.log
-
-# IDE
-*.iml
-*.ipr
-*.iws

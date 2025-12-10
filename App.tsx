@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { WORLD_SCENES, APP_TITLE } from './constants';
 import { ChatWindow } from './components/ChatWindow';
@@ -9,7 +8,6 @@ import { SceneCard } from './components/SceneCard';
 import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene, JournalEntry, JournalEcho, Mail, EraMemory, DebugLog } from './types';
 import { geminiService } from './services/gemini';
 import { storageService } from './services/storage';
-import { authApi } from './services/api';
 import { EraConstructorModal } from './components/EraConstructorModal';
 import { CharacterConstructorModal } from './components/CharacterConstructorModal';
 import { EntryPoint } from './components/EntryPoint';
@@ -91,6 +89,7 @@ const App: React.FC = () => {
 
   const [gameState, setGameState] = useState<GameState>(DEFAULT_STATE);
   const [isLoaded, setIsLoaded] = useState(false); 
+  const [initError, setInitError] = useState<string | null>(null);
   
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showEraCreator, setShowEraCreator] = useState(false);
@@ -119,49 +118,56 @@ const App: React.FC = () => {
   // --- PERSISTENCE LOGIC ---
   
   const loadGameData = async () => {
-      setIsLoaded(false);
-      const loadedState = await storageService.loadState();
-      if (loadedState) {
-          const savedSettings = (loadedState.settings || {}) as Partial<AppSettings>;
-          
-          const mergedSettings: AppSettings = {
-              ...DEFAULT_STATE.settings,
-              ...savedSettings,
-              geminiConfig: { ...DEFAULT_STATE.settings.geminiConfig, ...(savedSettings.geminiConfig || {}) },
-              openaiConfig: { ...DEFAULT_STATE.settings.openaiConfig, ...(savedSettings.openaiConfig || {}) },
-              qwenConfig: { ...DEFAULT_STATE.settings.qwenConfig, ...(savedSettings.qwenConfig || {}) },
-              doubaoConfig: { ...DEFAULT_STATE.settings.doubaoConfig, ...(savedSettings.doubaoConfig || {}) },
-              autoGenerateAvatars: savedSettings.autoGenerateAvatars ?? DEFAULT_STATE.settings.autoGenerateAvatars,
-              autoGenerateStoryScenes: savedSettings.autoGenerateStoryScenes ?? DEFAULT_STATE.settings.autoGenerateStoryScenes,
-              autoGenerateJournalImages: savedSettings.autoGenerateJournalImages ?? DEFAULT_STATE.settings.autoGenerateJournalImages,
-              textProvider: savedSettings.textProvider || DEFAULT_STATE.settings.textProvider,
-              imageProvider: savedSettings.imageProvider || DEFAULT_STATE.settings.imageProvider,
-              videoProvider: savedSettings.videoProvider || DEFAULT_STATE.settings.videoProvider,
-              audioProvider: savedSettings.audioProvider || DEFAULT_STATE.settings.audioProvider,
-              enableFallback: savedSettings.enableFallback ?? DEFAULT_STATE.settings.enableFallback,
-          };
+      try {
+          setIsLoaded(false);
+          setInitError(null);
+          const loadedState = await storageService.loadState();
+          if (loadedState) {
+              const savedSettings = (loadedState.settings || {}) as Partial<AppSettings>;
+              
+              const mergedSettings: AppSettings = {
+                  ...DEFAULT_STATE.settings,
+                  ...savedSettings,
+                  geminiConfig: { ...DEFAULT_STATE.settings.geminiConfig, ...(savedSettings.geminiConfig || {}) },
+                  openaiConfig: { ...DEFAULT_STATE.settings.openaiConfig, ...(savedSettings.openaiConfig || {}) },
+                  qwenConfig: { ...DEFAULT_STATE.settings.qwenConfig, ...(savedSettings.qwenConfig || {}) },
+                  doubaoConfig: { ...DEFAULT_STATE.settings.doubaoConfig, ...(savedSettings.doubaoConfig || {}) },
+                  autoGenerateAvatars: savedSettings.autoGenerateAvatars ?? DEFAULT_STATE.settings.autoGenerateAvatars,
+                  autoGenerateStoryScenes: savedSettings.autoGenerateStoryScenes ?? DEFAULT_STATE.settings.autoGenerateStoryScenes,
+                  autoGenerateJournalImages: savedSettings.autoGenerateJournalImages ?? DEFAULT_STATE.settings.autoGenerateJournalImages,
+                  textProvider: savedSettings.textProvider || DEFAULT_STATE.settings.textProvider,
+                  imageProvider: savedSettings.imageProvider || DEFAULT_STATE.settings.imageProvider,
+                  videoProvider: savedSettings.videoProvider || DEFAULT_STATE.settings.videoProvider,
+                  audioProvider: savedSettings.audioProvider || DEFAULT_STATE.settings.audioProvider,
+                  enableFallback: savedSettings.enableFallback ?? DEFAULT_STATE.settings.enableFallback,
+              };
 
-          setGameState(prev => ({
-            ...prev,
-            ...loadedState,
-            currentScreen: loadedState.userProfile ? 'entryPoint' : 'profileSetup',
-            generatingAvatarId: null,
-            activeJournalEntryId: null,
-            editingScenarioId: null,
-            tempStoryCharacter: null, 
-            mailbox: loadedState.mailbox || [],
-            lastLoginTime: loadedState.lastLoginTime || Date.now(),
-            sceneMemories: loadedState.sceneMemories || {},
-            customCharacters: loadedState.customCharacters || {},
-            debugLogs: [], 
-            settings: mergedSettings
-          }));
-          
-          geminiService.updateConfig(mergedSettings);
-      } else {
-          geminiService.updateConfig(DEFAULT_STATE.settings);
+              setGameState(prev => ({
+                ...prev,
+                ...loadedState,
+                currentScreen: loadedState.userProfile ? 'entryPoint' : 'profileSetup',
+                generatingAvatarId: null,
+                activeJournalEntryId: null,
+                editingScenarioId: null,
+                tempStoryCharacter: null, 
+                mailbox: loadedState.mailbox || [],
+                lastLoginTime: loadedState.lastLoginTime || Date.now(),
+                sceneMemories: loadedState.sceneMemories || {},
+                customCharacters: loadedState.customCharacters || {},
+                debugLogs: [], 
+                settings: mergedSettings
+              }));
+              
+              geminiService.updateConfig(mergedSettings);
+          } else {
+              geminiService.updateConfig(DEFAULT_STATE.settings);
+          }
+      } catch (err: any) {
+          console.error("Failed to load game state:", err);
+          setInitError(err?.message || "Unknown storage error");
+      } finally {
+          setIsLoaded(true);
       }
-      setIsLoaded(true);
   };
 
   useEffect(() => {
@@ -280,55 +286,16 @@ const App: React.FC = () => {
     }
   };
 
-  // 处理登录成功
-  const handleLoginSuccess = async (method: 'password' | 'wechat', identifier: string) => {
-    // 从localStorage获取token
-    const token = localStorage.getItem('auth_token');
-    
-    if (token) {
-      try {
-        // 使用token获取完整用户信息
-        const userInfo = await authApi.getCurrentUser(token);
-        
-        setGameState(prev => ({
-          ...prev,
-          userProfile: {
-            id: userInfo.id.toString(),
-            nickname: userInfo.nickname || userInfo.username,
-            avatarUrl: userInfo.avatar || '',
-            email: userInfo.email,
-            isGuest: false,
-            phoneNumber: method === 'password' ? identifier : undefined,
-          }
-        }));
-      } catch (err) {
-        console.error('获取用户信息失败:', err);
-        // 如果获取失败，使用基本信息
-        setGameState(prev => ({
-          ...prev,
-          userProfile: {
-            id: identifier,
-            nickname: identifier,
-            avatarUrl: '',
-            isGuest: false,
-            phoneNumber: method === 'password' ? identifier : undefined,
-          }
-        }));
-      }
-    } else {
-      // 没有token的情况
-      setGameState(prev => ({
-        ...prev,
-        userProfile: {
-          id: identifier,
-          nickname: identifier,
-          avatarUrl: '',
-          isGuest: false,
-          phoneNumber: method === 'password' ? identifier : undefined,
-        }
-      }));
-    }
-    
+  const handleLoginSuccess = (method: 'phone' | 'wechat', identifier: string) => {
+    setGameState(prev => ({
+      ...prev,
+      userProfile: prev.userProfile ? {
+        ...prev.userProfile,
+        isGuest: false,
+        id: identifier, 
+        phoneNumber: method === 'phone' ? identifier : undefined,
+      } : null
+    }));
     setShowLoginModal(false);
     
     if (pendingActionRef.current) {
@@ -337,38 +304,7 @@ const App: React.FC = () => {
     }
   };
 
-  // 检查本地存储中的token，自动登录
-  useEffect(() => {
-    const checkAuth = async () => {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        try {
-          const userInfo = await authApi.getCurrentUser(token);
-          setGameState(prev => ({
-            ...prev,
-            userProfile: {
-              id: userInfo.id.toString(),
-              nickname: userInfo.nickname || userInfo.username,
-              avatarUrl: userInfo.avatar || '',
-              email: userInfo.email,
-              isGuest: false,
-            }
-          }));
-        } catch (err) {
-          console.error('自动登录失败:', err);
-          // token无效，清除
-          localStorage.removeItem('auth_token');
-        }
-      }
-    };
-    
-    checkAuth();
-  }, []);
-
   const handleLogout = () => {
-    // 清除localStorage中的token
-    localStorage.removeItem('auth_token');
-    
     const nextState: GameState = {
         ...gameState,
         userProfile: null,
@@ -829,6 +765,14 @@ const App: React.FC = () => {
   }
 
   if (!isLoaded) return <div className="h-screen w-screen bg-black flex items-center justify-center text-white">Loading HeartSphere Core...</div>;
+  
+  if (initError) return (
+      <div className="h-screen w-screen bg-black flex flex-col items-center justify-center text-white p-6 text-center">
+          <h2 className="text-red-500 font-bold text-xl mb-2">Initialization Error</h2>
+          <p className="text-gray-400 mb-4">{initError}</p>
+          <button onClick={() => window.location.reload()} className="bg-indigo-600 px-4 py-2 rounded">Retry</button>
+      </div>
+  );
 
   const currentSceneLocal = [...WORLD_SCENES, ...gameState.customScenes].find(s => s.id === gameState.selectedSceneId);
   
@@ -1023,14 +967,14 @@ const App: React.FC = () => {
                                     });
                                 }}
                                 className="relative p-2 bg-black/60 rounded-full hover:bg-white/20 border border-white/20 text-white z-40 pointer-events-auto"
-                                title="编辑时代"
+                                title="编辑"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 pointer-events-none"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" /></svg>
                                 </button>
                                 <button 
                                 onClick={(e) => handleDeleteEra(scene.id, e)}
                                 className="relative p-2 bg-black/60 rounded-full hover:bg-red-500/50 border border-white/20 text-white z-40 pointer-events-auto"
-                                title="删除时代"
+                                title="删除"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 pointer-events-none"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
                                 </button>

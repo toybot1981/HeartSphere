@@ -1,5 +1,7 @@
 {
   "name": "心域 HeartSphere",
   "description": "每个人都想找到自己的桃花源",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

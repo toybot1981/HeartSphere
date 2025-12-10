@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, Character, Message, WorldScene, JournalEntry, AppSettings, CustomScenario } from '../types';
 import { geminiService } from '../services/gemini';
@@ -66,6 +65,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
 
     const [gameState, setGameState] = useState<GameState>(DEFAULT_STATE);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [initError, setInitError] = useState<string | null>(null);
     const [profileNickname, setProfileNickname] = useState('');
     
     // UI States
@@ -79,12 +79,18 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
     // --- INIT & STORAGE ---
     useEffect(() => {
         const init = async () => {
-            const loaded = await storageService.loadState();
-            if (loaded) {
-                setGameState(prev => ({ ...prev, ...loaded, currentScreen: loaded.userProfile ? 'realWorld' : 'profileSetup', debugLogs: [] }));
-                if (loaded.settings) geminiService.updateConfig(loaded.settings as AppSettings);
+            try {
+                const loaded = await storageService.loadState();
+                if (loaded) {
+                    setGameState(prev => ({ ...prev, ...loaded, currentScreen: loaded.userProfile ? 'realWorld' : 'profileSetup', debugLogs: [] }));
+                    if (loaded.settings) geminiService.updateConfig(loaded.settings as AppSettings);
+                }
+            } catch (e: any) {
+                console.error("Mobile load error:", e);
+                setInitError("无法加载数据，请重试。");
+            } finally {
+                setIsLoaded(true);
             }
-            setIsLoaded(true);
         };
         init();
     }, []);
@@ -281,6 +287,14 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
     // --- RENDER ---
     
     if (!isLoaded) return <div className="h-screen bg-black flex items-center justify-center text-white">Loading Mobile Core...</div>;
+    
+    if (initError) return (
+        <div className="h-screen w-screen bg-black flex flex-col items-center justify-center text-white p-6 text-center">
+            <h2 className="text-red-500 font-bold text-xl mb-2">Initialization Error</h2>
+            <p className="text-gray-400 mb-4">{initError}</p>
+            <button onClick={() => window.location.reload()} className="bg-indigo-600 px-4 py-2 rounded">Retry</button>
+        </div>
+    );
 
     if (gameState.currentScreen === 'profileSetup') {
         return (
