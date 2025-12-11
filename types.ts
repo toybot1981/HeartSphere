@@ -150,6 +150,19 @@ export interface Mail {
   themeColor: string;
 }
 
+// --- New Memory Ticket Types ---
+export interface MemoryTicket {
+  id: string;
+  authorName: string;
+  authorAvatarUrl?: string;
+  title: string;
+  content: string;
+  imageUrl?: string; // The scene visual
+  timestamp: number;
+  allowInteraction: boolean; // "Interactive" vs "View Only"
+  musicMood?: string; // Optional mood for AI music generation
+}
+
 // Debug Logging Structure
 export interface DebugLog {
   id: string;
@@ -162,7 +175,7 @@ export interface DebugLog {
 }
 
 export interface GameState {
-  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder' | 'connectionSpace' | 'admin' | 'mobileProfile';
+  currentScreen: 'profileSetup' | 'entryPoint' | 'realWorld' | 'sceneSelection' | 'characterSelection' | 'chat' | 'builder' | 'connectionSpace' | 'admin' | 'mobileProfile' | 'immersiveMemory';
   userProfile: UserProfile | null;
   selectedSceneId: string | null;
   selectedCharacterId: string | null;
@@ -192,5 +205,8 @@ export interface GameState {
   lastLoginTime: number; // For tracking offline duration
   sceneMemories: Record<string, EraMemory[]>; // Map sceneId -> memories
   
+  // --- New Ticket State ---
+  currentTicket: MemoryTicket | null;
+
   debugLogs: DebugLog[]; // Store runtime logs
 }

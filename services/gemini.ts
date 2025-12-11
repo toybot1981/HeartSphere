@@ -923,6 +923,36 @@ export class GeminiService {
       }
   }
 
+  // --- NEW: Daily Greeting / Prompt ---
+  async generateDailyGreeting(userName: string, pastEntries: JournalEntry[]): Promise<{greeting: string, prompt: string} | null> {
+      // Get last 3 entries content for context
+      const recent = pastEntries.slice(-3).map(e => `[${new Date(e.timestamp).toLocaleDateString()}] ${e.content}`).join('\n');
+      const isNewUser = pastEntries.length === 0;
+
+      const systemPrompt = `You are a gentle, philosophical AI companion in the "HeartSphere" world.
+      Your goal is to greet the user and ask a deep, thought-provoking question to help them start journaling.
+      
+      Context:
+      - User Name: ${userName}
+      - Recent Journal Entries (if any): \n${recent}
+      
+      Instructions:
+      1. Write a short, warm greeting (1 sentence). If they haven't written in a while, welcome them back gently.
+      2. Write a single, insightful question (prompt) based on their recent themes (e.g., if they were sad, ask about healing; if happy, ask about gratitude).
+      3. If no entries, ask a universal question about their current state or dreams.
+      4. Output strictly in JSON format: { "greeting": "...", "prompt": "..." }
+      5. Language: Chinese. Tone: Poetic, empathetic, calm.`;
+
+      try {
+          const text = await this.generateText("Generate daily prompt.", systemPrompt, true);
+          const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          return JSON.parse(jsonStr);
+      } catch (e) {
+          console.error("Daily greeting failed", e);
+          return { greeting: `欢迎回到心域，${userName}。`, prompt: "此刻，你的内心是什么颜色的？" };
+      }
+  }
+
   async generateMoodImage(text: string): Promise<string | null> {
       const prompt = `Abstract, artistic, high-quality illustration representing this emotion/thought: "${text}". Style: Ethereal, Dreamlike, Digital Art, vibrant colors, expressive brushstrokes.`;
       return this.generateImageFromPrompt(prompt, '16:9');

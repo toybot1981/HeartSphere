@@ -8,7 +8,7 @@ const DB_VERSION = 1;
 const LEGACY_STORAGE_KEY = 'HEARTSPHERE_MEMORY_CORE_V1';
 
 // Definte a partial type for saving to avoid saving unnecessary UI state
-type PersistedState = Omit<GameState, 'currentScreen' | 'currentScenarioState' | 'generatingAvatarId' | 'activeJournalEntryId' | 'tempStoryCharacter' | 'debugLogs'>;
+type PersistedState = Omit<GameState, 'currentScreen' | 'currentScenarioState' | 'generatingAvatarId' | 'activeJournalEntryId' | 'tempStoryCharacter' | 'debugLogs' | 'currentTicket'>;
 
 export const storageService = {
   

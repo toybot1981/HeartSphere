@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { WORLD_SCENES, APP_TITLE } from './constants';
 import { ChatWindow } from './components/ChatWindow';
@@ -5,7 +6,7 @@ import { ScenarioBuilder } from './components/ScenarioBuilder';
 import { SettingsModal } from './components/SettingsModal';
 import { CharacterCard } from './components/CharacterCard';
 import { SceneCard } from './components/SceneCard';
-import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene, JournalEntry, JournalEcho, Mail, EraMemory, DebugLog } from './types';
+import { Character, GameState, Message, CustomScenario, AppSettings, WorldScene, JournalEntry, JournalEcho, Mail, EraMemory, DebugLog, MemoryTicket } from './types';
 import { geminiService } from './services/gemini';
 import { storageService } from './services/storage';
 import { EraConstructorModal } from './components/EraConstructorModal';
@@ -20,6 +21,8 @@ import { ConnectionSpace } from './components/ConnectionSpace';
 import { AdminScreen } from './admin/AdminScreen';
 import { LoginModal } from './components/LoginModal';
 import { MobileApp } from './mobile/MobileApp';
+import { MemoryTicketModal } from './components/MemoryTicketModal';
+import { ImmersiveMemoryView } from './components/ImmersiveMemoryView';
 
 const App: React.FC = () => {
   
@@ -85,6 +88,7 @@ const App: React.FC = () => {
     lastLoginTime: Date.now(),
     sceneMemories: {}, 
     debugLogs: [],
+    currentTicket: null,
   };
 
   const [gameState, setGameState] = useState<GameState>(DEFAULT_STATE);
@@ -108,6 +112,8 @@ const App: React.FC = () => {
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const pendingActionRef = useRef<() => void>(() => {});
+
+  const [sharingEntry, setSharingEntry] = useState<JournalEntry | null>(null); // For Ticket Modal
 
   const hasCheckedMail = useRef(false);
   
@@ -758,6 +764,27 @@ const App: React.FC = () => {
       return WORLD_SCENES[0];
   };
 
+  // --- Ticket Handlers ---
+  const handleRedeemTicket = (key: string) => {
+      try {
+          // Base64 decode
+          const json = decodeURIComponent(atob(key).split('').map(function(c) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          }).join(''));
+          
+          const ticket = JSON.parse(json) as MemoryTicket;
+          
+          setGameState(prev => ({
+              ...prev,
+              currentTicket: ticket,
+              currentScreen: 'immersiveMemory'
+          }));
+      } catch (e) {
+          alert("无效的漫游票 (Invalid Key)");
+          console.error(e);
+      }
+  };
+
   // --- RENDER BLOCK (Must be last) ---
   
   if (isMobileMode) {
@@ -809,6 +836,14 @@ const App: React.FC = () => {
           />
       )}
 
+      {sharingEntry && gameState.userProfile && (
+          <MemoryTicketModal 
+              entry={sharingEntry}
+              user={gameState.userProfile}
+              onClose={() => setSharingEntry(null)}
+          />
+      )}
+
       {gameState.currentScreen === 'profileSetup' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 p-6">
            <div className="max-w-md w-full text-center space-y-8">
@@ -833,6 +868,14 @@ const App: React.FC = () => {
             nickname={gameState.userProfile.nickname} 
             onOpenSettings={() => setShowSettingsModal(true)}
             onSwitchToMobile={handleSwitchToMobile}
+            onRedeemTicket={handleRedeemTicket}
+          />
+      )}
+
+      {gameState.currentScreen === 'immersiveMemory' && gameState.currentTicket && (
+          <ImmersiveMemoryView 
+              ticket={gameState.currentTicket}
+              onClose={() => setGameState(prev => ({...prev, currentScreen: 'entryPoint', currentTicket: null}))}
           />
       )}
 
@@ -846,6 +889,7 @@ const App: React.FC = () => {
              onChatWithCharacter={handleChatWithCharacterByName}
              onBack={handleEnterNexus}
              onConsultMirror={handleConsultMirror} 
+             onShare={(entry) => setSharingEntry(entry)}
              autoGenerateImage={gameState.settings.autoGenerateJournalImages}
           />
       )}

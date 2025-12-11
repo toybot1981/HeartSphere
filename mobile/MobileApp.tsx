@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, Character, Message, WorldScene, JournalEntry, AppSettings, CustomScenario } from '../types';
 import { geminiService } from '../services/gemini';
@@ -60,7 +61,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPC }) => {
         mailbox: [],
         lastLoginTime: Date.now(),
         sceneMemories: {},
-        debugLogs: []
+        debugLogs: [],
+        currentTicket: null
     };
 
     const [gameState, setGameState] = useState<GameState>(DEFAULT_STATE);

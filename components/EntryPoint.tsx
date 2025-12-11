@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from './Button';
 
 interface EntryPointProps {
@@ -7,9 +7,21 @@ interface EntryPointProps {
   onOpenSettings: () => void;
   nickname: string;
   onSwitchToMobile: () => void;
+  onRedeemTicket: (key: string) => void; // New Handler
 }
 
-export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettings, nickname, onSwitchToMobile }) => {
+export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettings, nickname, onSwitchToMobile, onRedeemTicket }) => {
+  const [showKeyInput, setShowKeyInput] = useState(false);
+  const [ticketKey, setTicketKey] = useState('');
+
+  const handleRedeem = () => {
+      if (ticketKey.trim()) {
+          onRedeemTicket(ticketKey.trim());
+          setTicketKey('');
+          setShowKeyInput(false);
+      }
+  };
+
   return (
     <div className="relative h-full w-full flex flex-col items-center justify-center p-4 bg-black overflow-hidden font-sans">
       {/* Background Effect */}
@@ -58,7 +70,7 @@ export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettin
           title="设置 Settings"
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072" />
           </svg>
         </button>
       </div>
@@ -118,6 +130,28 @@ export const EntryPoint: React.FC<EntryPointProps> = ({ onNavigate, onOpenSettin
                       <span className="text-[10px] font-normal opacity-70">REAL WORLD</span>
                   </span>
               </button>
+          </div>
+
+          {/* Ticket Redemption Button */}
+          <div className="relative">
+              {showKeyInput ? (
+                  <div className="flex gap-2 animate-fade-in bg-black/60 backdrop-blur rounded-lg p-2 border border-white/20">
+                      <input 
+                        value={ticketKey}
+                        onChange={e => setTicketKey(e.target.value)}
+                        placeholder="Paste Memory Key..."
+                        className="bg-transparent border-none text-white text-xs w-48 focus:ring-0"
+                        autoFocus
+                      />
+                      <button onClick={handleRedeem} className="text-xs bg-indigo-600 px-3 py-1 rounded hover:bg-indigo-500">GO</button>
+                      <button onClick={() => setShowKeyInput(false)} className="text-xs text-gray-400 px-2">&times;</button>
+                  </div>
+              ) : (
+                  <button onClick={() => setShowKeyInput(true)} className="text-xs text-white/40 hover:text-pink-300 tracking-widest uppercase flex items-center gap-2 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>
+                      使用漫游票 (Redeem Ticket)
+                  </button>
+              )}
           </div>
       </div>
       
