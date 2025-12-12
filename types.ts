@@ -132,6 +132,7 @@ export interface JournalEntry {
   id: string;
   title: string;
   content: string;
+  tags?: string[]; // Evernote-like tagging
   timestamp: number;
   imageUrl?: string; // Mind Projection
   echo?: JournalEcho; // Echoes of Wisdom

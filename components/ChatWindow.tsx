@@ -1,9 +1,9 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Character, Message, CustomScenario, AppSettings, StoryNode, UserProfile, JournalEcho } from '../types';
 import { geminiService } from '../services/gemini';
 import { GenerateContentResponse } from '@google/genai';
 import { Button } from './Button';
+import { ChatAmbience, AmbienceType } from './ChatAmbience';
 
 // --- Audio Decoding Helpers (Raw PCM) ---
 function decode(base64: string) {
@@ -36,7 +36,6 @@ async function decodeAudioData(
 }
 
 // --- Rich Text Parser ---
-// Parses *actions* and (thoughts) for styled rendering
 const RichTextRenderer: React.FC<{ text: string, colorAccent: string }> = ({ text, colorAccent }) => {
     const parts = text.split(/(\*[^*]+\*|\([^)]+\))/g);
 
@@ -53,14 +52,13 @@ const RichTextRenderer: React.FC<{ text: string, colorAccent: string }> = ({ tex
                 } else if (part.startsWith('(') && part.endsWith(')')) {
                     // Thought/Inner Monologue: Smaller, distinct color
                     return (
-                        <span key={index} className="block text-xs my-1 font-serif opacity-80 tracking-wide" style={{ color: `${colorAccent}cc` }}>
+                        <span key={index} className="block text-xs my-1 font-serif opacity-80 tracking-wide pl-2 border-l-2 border-white/20" style={{ color: `${colorAccent}cc` }}>
                             {part}
                         </span>
                     );
                 } else if (part.trim() === '') {
                     return null;
                 } else {
-                    // Standard dialogue
                     return <span key={index}>{part}</span>;
                 }
             })}
@@ -80,6 +78,19 @@ interface ChatWindowProps {
   onUpdateScenarioState?: (nodeId: string) => void;
   onBack: (echo?: JournalEcho) => void; 
 }
+
+// --- UPDATED ACTION CHIPS ---
+// More distinct icons and varied actions
+const ACTION_CHIPS = [
+    { label: '👋 打招呼', text: '*微笑着向你挥手*', icon: '👋' },
+    { label: '🫂 抱一下', text: '*张开双臂，给你一个温暖的拥抱*', icon: '🫂' },
+    { label: '✋ 摸摸头', text: '*轻轻地摸了摸你的头，眼神温柔*', icon: '✋' },
+    { label: '🍵 递奶茶', text: '*递给你一杯温热的奶茶*', icon: '🍵' },
+    { label: '💢 戳一戳', text: '*用手指轻轻戳了戳你的脸颊*', icon: '💢' },
+    { label: '👀 盯——', text: '*凑近仔细观察你的表情*', icon: '👀' },
+    { label: '🎁 送礼物', text: '*害羞地拿出一个包装精美的小盒子*', icon: '🎁' },
+    { label: '📸 拍合照', text: '*举起手机，咔嚓一声拍下两人的合影*', icon: '📸' },
+];
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({ 
   character, customScenario, history, scenarioState, settings, userProfile, activeJournalEntryId, onUpdateHistory, onUpdateScenarioState, onBack 
@@ -109,6 +120,27 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const isStoryMode = !!customScenario || character?.id.startsWith('story_');
   const isScenarioMode = !!customScenario; // Specifically for Node-based scenarios
 
+  // --- AMBIENCE LOGIC ---
+  const currentMood: AmbienceType = useMemo(() => {
+      if (history.length === 0) return 'none';
+      const lastMsg = history[history.length - 1];
+      const text = (lastMsg.text || '').toLowerCase();
+      
+      const keywords = {
+          sakura: ['喜欢', '爱', 'love', 'blush', '害羞', 'kiss', 'heart', '抱', 'warm', 'cute', '甜'],
+          rain: ['难过', '哭', '泪', 'sad', 'cry', 'tears', 'sorry', '对不起', '痛', 'rain', 'alone', '冷'],
+          sparkle: ['笑', '开心', 'happy', 'laugh', 'great', '棒', '谢谢', 'thanks', 'wish', 'hope', '梦想', 'star'],
+          glitch: ['秘密', '奇怪', 'secret', 'code', 'error', 'bug', 'glitch', 'strange', 'hack', 'system', '数据']
+      };
+
+      if (keywords.sakura.some(k => text.includes(k))) return 'sakura';
+      if (keywords.rain.some(k => text.includes(k))) return 'rain';
+      if (keywords.sparkle.some(k => text.includes(k))) return 'sparkle';
+      if (keywords.glitch.some(k => text.includes(k))) return 'glitch';
+      
+      return 'none';
+  }, [history]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -116,8 +148,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   useEffect(scrollToBottom, [history, isCinematic]); 
 
   // --- CRITICAL FIX: Reset Session on Mount ---
-  // This ensures that when we enter a chat, the Gemini Service clears any stale cache 
-  // and rebuilds the context from the passed 'history' prop.
   useEffect(() => {
     if (character) {
         geminiService.resetSession(character.id);
@@ -277,13 +307,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading || isScenarioMode) return;
-    const userText = input.trim();
+  const handleSend = async (overrideText?: string) => {
+    const textToSend = overrideText || input.trim();
+    if (!textToSend || isLoading || isScenarioMode) return;
+    
     setInput('');
     setIsLoading(true);
     
-    const userMsg: Message = { id: `user_${Date.now()}`, role: 'user', text: userText, timestamp: Date.now() };
+    const userMsg: Message = { id: `user_${Date.now()}`, role: 'user', text: textToSend, timestamp: Date.now() };
     let currentHistory = [...history, userMsg];
     onUpdateHistory(currentHistory);
     
@@ -292,7 +323,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     
     try {
       // Pass userProfile correctly
-      const stream = await geminiService.sendMessageStream(character, currentHistory, userText, userProfile);
+      const stream = await geminiService.sendMessageStream(character, currentHistory, textToSend, userProfile);
       let firstChunk = true;
       for await (const chunk of stream) {
         const chunkText = (chunk as GenerateContentResponse).text;
@@ -372,6 +403,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     <div className="relative h-screen w-full overflow-hidden bg-black text-white font-sans">
       <div className="absolute inset-0 bg-cover bg-center transition-all duration-1000" style={{ backgroundImage: `url(${backgroundImage})`, filter: isCinematic ? 'brightness(0.9)' : (isStoryMode ? 'blur(0px) brightness(0.6)' : 'blur(4px) opacity(0.6)') }} />
       
+      {/* Particle Effect Layer */}
+      <ChatAmbience type={currentMood} />
+
       {!isStoryMode && !isCinematic && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
           <div className="relative h-[85vh] w-[85vh] max-w-full flex items-end justify-center pb-10">
@@ -438,7 +472,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       )}
 
       {/* Main Chat Area */}
-      <div className={`absolute bottom-0 left-0 right-0 z-20 flex flex-col justify-end pb-4 bg-gradient-to-t from-black via-black/80 to-transparent transition-all duration-500 ${isCinematic ? 'h-[40vh] bg-gradient-to-t from-black via-black/50 to-transparent' : 'h-[65vh]'}`}>
+      <div className={`absolute bottom-0 left-0 right-0 z-20 flex flex-col justify-end pb-4 bg-gradient-to-t from-black via-black/80 to-transparent transition-all duration-500 ${isCinematic ? 'h-[40vh] bg-gradient-to-t from-black via-black/50 to-transparent' : 'h-[75vh]'}`}>
         
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 space-y-4 scrollbar-hide" style={{ maskImage: 'linear-gradient(to bottom, transparent, black 15%)' }}>
@@ -495,9 +529,26 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             ) : (
                 /* Input Area - Hidden in Cinematic Mode */
                 !isCinematic && (
-                <div className="relative flex items-center bg-black/90 rounded-2xl p-2 border border-white/10 animate-fade-in w-full">
-                   <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="输入你的消息..." className="flex-1 bg-transparent border-none text-white placeholder-white/40 focus:ring-0 resize-none max-h-24 py-3 px-3 scrollbar-hide text-base" rows={1} disabled={isLoading} />
-                   <Button onClick={handleSend} disabled={isLoading || !input.trim()} className="ml-2 !rounded-xl !px-6 !py-2 shadow-lg" style={{ backgroundColor: character.colorAccent }}>发送</Button>
+                <div className="flex flex-col gap-2">
+                    {/* Quick Actions ScrollView */}
+                    <div className="flex gap-3 overflow-x-auto scrollbar-hide py-1 mask-linear-fade">
+                        {ACTION_CHIPS.map((action) => (
+                            <button
+                                key={action.label}
+                                onClick={() => handleSend(action.text)}
+                                disabled={isLoading}
+                                className="group flex items-center gap-2 px-4 py-2 bg-black/40 hover:bg-white/10 border border-white/10 rounded-full backdrop-blur-sm transition-all whitespace-nowrap active:scale-95 shrink-0"
+                            >
+                                <span className="text-lg group-hover:scale-125 transition-transform duration-300">{action.icon}</span>
+                                <span className="text-xs text-white/90 font-medium">{action.label}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="relative flex items-center bg-black/90 rounded-2xl p-2 border border-white/10 animate-fade-in w-full shadow-lg">
+                       <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="输入你的消息..." className="flex-1 bg-transparent border-none text-white placeholder-white/40 focus:ring-0 resize-none max-h-24 py-3 px-3 scrollbar-hide text-base" rows={1} disabled={isLoading} />
+                       <Button onClick={() => handleSend()} disabled={isLoading || !input.trim()} className="ml-2 !rounded-xl !px-6 !py-2 shadow-lg" style={{ backgroundColor: character.colorAccent }}>发送</Button>
+                    </div>
                 </div>
                 )
             )}

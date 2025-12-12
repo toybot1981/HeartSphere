@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality, Type } from "@google/genai";
 import { Message, Character, StoryNode, CustomScenario, UserProfile, WorldScene, JournalEcho, JournalEntry, AppSettings, AIProvider, DebugLog } from "../types";
 import { createScenarioContext } from "../constants";
@@ -1010,6 +1009,25 @@ export class GeminiService {
         }
         return null;
     });
+  }
+
+  // --- NEW: Oracle Reading ---
+  async generateOracleReading(cardName: string, journalContext: string[]): Promise<string> {
+      const prompt = `User drew the Oracle Card: "${cardName}".
+      Based on their recent journal context (below), provide a short, mystical, yet insightful interpretation of what this card means for their day.
+      
+      Context:
+      ${journalContext.join('\n').substring(0, 500)}
+      
+      Style: Cryptic, poetic, Cyberpunk-Zen. 
+      Language: Chinese.
+      Length: Max 2 sentences.`;
+
+      try {
+          return await this.generateText(prompt, "You are a digital oracle.");
+      } catch (e) {
+          return "数据迷雾太浓，信号中断...请听从内心的声音。";
+      }
   }
 }
 

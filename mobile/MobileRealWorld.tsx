@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { JournalEntry } from '../types';
 import { Button } from '../components/Button';
 import { geminiService } from '../services/gemini';
 
 interface MobileRealWorldProps {
   entries: JournalEntry[];
-  onAddEntry: (title: string, content: string, imageUrl?: string, insight?: string) => void;
+  onAddEntry: (title: string, content: string, imageUrl?: string, insight?: string, tags?: string[]) => void;
   onUpdateEntry: (entry: JournalEntry) => void;
   onDeleteEntry: (id: string) => void;
   onExplore: (entry: JournalEntry) => void;
@@ -19,17 +20,28 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
 }) => {
   const [view, setView] = useState<'list' | 'detail' | 'edit'>('list');
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Editor State
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [insight, setInsight] = useState<string | null>(null);
+
+  // Derived State
+  const allUniqueTags = useMemo(() => {
+      const allTags = new Set<string>();
+      entries.forEach(e => e.tags?.forEach(t => allTags.add(t)));
+      return Array.from(allTags).sort();
+  }, [entries]);
 
   const startNew = () => {
       setSelectedEntry(null);
       setTitle('');
       setContent('');
+      setTags([]);
       setInsight(null);
       setView('edit');
   };
@@ -38,6 +50,7 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
       setSelectedEntry(entry);
       setTitle(entry.title);
       setContent(entry.content);
+      setTags(entry.tags || []);
       setInsight(entry.insight || null);
       setView('detail');
   };
@@ -47,11 +60,12 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
   };
 
   const handleSave = async () => {
-      if (!title.trim() || !content.trim()) return;
+      if (!title.trim() && !content.trim()) return;
+      const finalTitle = title.trim() || new Date().toLocaleDateString();
 
       if (selectedEntry && view === 'edit' && selectedEntry.id) {
           // Update
-          const updated = { ...selectedEntry, title, content, insight: insight || undefined };
+          const updated = { ...selectedEntry, title: finalTitle, content, tags, insight: insight || undefined };
           onUpdateEntry(updated);
           setSelectedEntry(updated);
           setView('detail');
@@ -65,7 +79,7 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
               } catch(e) {}
               setIsGenerating(false);
           }
-          onAddEntry(title, content, img, insight || undefined);
+          onAddEntry(finalTitle, content, img, insight || undefined, tags);
           setView('list');
       }
   };
@@ -77,11 +91,40 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
     if (res) setInsight(res);
   };
 
+  const handleAddTag = (e?: React.KeyboardEvent) => {
+      if (e) e.preventDefault(); // Stop unwanted newlines/submits
+      if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+          setTags([...tags, tagInput.trim()]);
+          setTagInput('');
+      }
+  };
+
+  const handleTagClick = (tag: string) => {
+      if (!tags.includes(tag)) {
+          setTags([...tags, tag]);
+      }
+  };
+
+  const handleRemoveTag = (t: string) => {
+      setTags(tags.filter(tag => tag !== t));
+  };
+
+  const handleListTagClick = (tag: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setSearchQuery(tag);
+  };
+
+  const filteredEntries = entries.filter(e => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return e.title.toLowerCase().includes(q) || e.content.toLowerCase().includes(q) || e.tags?.some(t => t.toLowerCase().includes(q));
+  });
+
   // --- LIST VIEW ---
   if (view === 'list') {
       return (
           <div className="h-full bg-slate-950 p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-24 overflow-y-auto">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center mb-4">
                   <div>
                       <div className="flex items-center gap-3">
                           <h1 className="text-3xl font-bold text-white">日记</h1>
@@ -97,15 +140,48 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
                   <button onClick={startNew} className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-600 to-purple-600 text-white flex items-center justify-center shadow-lg font-bold text-2xl active:scale-95 transition-transform">+</button>
               </div>
 
+              {/* Search */}
+              <div className="mb-4 relative">
+                  <input 
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="搜索日记 / #标签..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 outline-none focus:border-indigo-500 transition-colors"
+                  />
+                  {searchQuery && (
+                      <button 
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-3 top-3 text-slate-500 hover:text-white"
+                      >
+                          &times;
+                      </button>
+                  )}
+              </div>
+
               <div className="space-y-4">
-                  {entries.length === 0 && <p className="text-center text-slate-600 mt-10">还没有日记，写一篇吧。</p>}
-                  {entries.sort((a,b) => b.timestamp - a.timestamp).map(entry => (
-                      <div key={entry.id} onClick={() => openEntry(entry)} className="bg-slate-900 rounded-xl p-4 border border-slate-800 active:bg-slate-800">
+                  {filteredEntries.length === 0 && <p className="text-center text-slate-600 mt-10">
+                      {searchQuery ? '未找到相关日记' : '还没有日记，写一篇吧。'}
+                  </p>}
+                  {filteredEntries.sort((a,b) => b.timestamp - a.timestamp).map(entry => (
+                      <div key={entry.id} onClick={() => openEntry(entry)} className="bg-slate-900 rounded-xl p-4 border border-slate-800 active:bg-slate-800 transition-colors">
                           <div className="flex justify-between items-start mb-2">
                               <h3 className="text-white font-bold truncate flex-1">{entry.title}</h3>
                               <span className="text-[10px] text-slate-500">{new Date(entry.timestamp).toLocaleDateString()}</span>
                           </div>
                           <p className="text-slate-400 text-sm line-clamp-2">{entry.content}</p>
+                          {entry.tags && entry.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                  {entry.tags.map(t => (
+                                      <span 
+                                        key={t} 
+                                        onClick={(e) => handleListTagClick(t, e)}
+                                        className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700 active:bg-slate-700 active:text-white transition-colors"
+                                      >
+                                          #{t}
+                                      </span>
+                                  ))}
+                              </div>
+                          )}
                           {entry.imageUrl && <div className="mt-3 h-24 w-full rounded-lg bg-cover bg-center opacity-80" style={{backgroundImage: `url(${entry.imageUrl})`}} />}
                       </div>
                   ))}
@@ -119,7 +195,7 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
       return (
           <div className="h-full bg-slate-950 flex flex-col pb-24">
               <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center gap-4 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md sticky top-0 z-10">
-                  <button onClick={() => setView('list')} className="text-slate-400">&larr;</button>
+                  <button onClick={() => setView('list')} className="text-slate-400 text-lg">&larr;</button>
                   <h2 className="text-white font-bold truncate flex-1">{selectedEntry.title}</h2>
                   <button onClick={startEdit} className="text-indigo-400 text-sm">编辑</button>
               </div>
@@ -127,6 +203,15 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
                   {selectedEntry.imageUrl && (
                       <img src={selectedEntry.imageUrl} className="w-full rounded-xl mb-6 shadow-lg" alt="Mind Projection" />
                   )}
+                  
+                  {selectedEntry.tags && selectedEntry.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                          {selectedEntry.tags.map(t => (
+                              <span key={t} className="text-xs bg-indigo-900/30 text-indigo-300 px-2 py-1 rounded-full border border-indigo-500/30">#{t}</span>
+                          ))}
+                      </div>
+                  )}
+
                   <p className="text-slate-200 leading-relaxed whitespace-pre-wrap">{selectedEntry.content}</p>
                   
                   {selectedEntry.insight && (
@@ -157,18 +242,55 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
                     {isGenerating ? '...' : '保存'}
                 </button>
            </div>
-           <div className="flex-1 p-4 flex flex-col gap-4">
+           <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto">
                <input 
                  value={title} 
                  onChange={e => setTitle(e.target.value)} 
                  placeholder="标题..." 
                  className="bg-transparent text-xl font-bold text-white placeholder-slate-600 outline-none" 
                />
+               
+               {/* Tags Input */}
+               <div>
+                   <div className="flex flex-wrap gap-2 mb-2">
+                       {tags.map(t => (
+                           <span key={t} className="text-xs bg-indigo-900/30 text-indigo-300 px-2 py-1 rounded-full border border-indigo-500/30 flex items-center gap-1">
+                               #{t}
+                               <button onClick={() => handleRemoveTag(t)} className="text-indigo-400 font-bold">&times;</button>
+                           </span>
+                       ))}
+                   </div>
+                   <div className="flex gap-2">
+                       <input 
+                           value={tagInput}
+                           onChange={e => setTagInput(e.target.value)}
+                           onKeyDown={e => e.key === 'Enter' && handleAddTag(e)}
+                           placeholder="添加标签..."
+                           className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none flex-1"
+                       />
+                       <button onClick={() => handleAddTag()} disabled={!tagInput.trim()} className="text-xs bg-slate-800 px-3 py-1 rounded text-slate-300">+</button>
+                   </div>
+                   {/* Suggested Tags (Mobile) */}
+                   {allUniqueTags.length > 0 && (
+                       <div className="flex flex-wrap gap-2 mt-2">
+                           {allUniqueTags.filter(t => !tags.includes(t)).slice(0, 5).map(t => (
+                               <button 
+                                 key={t} 
+                                 onClick={() => handleTagClick(t)}
+                                 className="text-[10px] text-slate-500 bg-slate-800/50 px-2 py-1 rounded border border-slate-700/50 hover:bg-slate-800 hover:text-indigo-300"
+                               >
+                                   #{t}
+                               </button>
+                           ))}
+                       </div>
+                   )}
+               </div>
+
                <textarea 
                  value={content} 
                  onChange={e => setContent(e.target.value)} 
                  placeholder="写下你的想法..." 
-                 className="flex-1 bg-transparent text-slate-300 placeholder-slate-600 outline-none resize-none leading-relaxed" 
+                 className="flex-1 bg-transparent text-slate-300 placeholder-slate-600 outline-none resize-none leading-relaxed text-base min-h-[200px]" 
                />
                
                {insight && (
@@ -177,8 +299,8 @@ export const MobileRealWorld: React.FC<MobileRealWorldProps> = ({
                    </div>
                )}
 
-               <div className="flex justify-end">
-                   <button onClick={handleMirror} className="text-xs flex items-center gap-1 text-cyan-400 border border-cyan-800 rounded-full px-3 py-1 bg-cyan-900/10">
+               <div className="flex justify-end pt-4">
+                   <button onClick={handleMirror} className="text-xs flex items-center gap-1 text-cyan-400 border border-cyan-800 rounded-full px-3 py-2 bg-cyan-900/10">
                        <span>🔮</span> 本我镜像分析
                    </button>
                </div>
